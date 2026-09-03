@@ -13,11 +13,12 @@ import type {
 
 /** Weighted mix used by compute_score. Must sum to 1. */
 export const SCORE_WEIGHTS = {
-  risk_inverse: 0.25,
-  social_signal: 0.2,
-  narrative_fit: 0.25,
+  risk_inverse: 0.22,
+  social_signal: 0.15,
+  narrative_fit: 0.18,
   curve_health: 0.15,
   wallet_diversity: 0.15,
+  momentum: 0.15,
 } as const;
 
 const GENERIC_TICKERS = new Set([
@@ -83,6 +84,7 @@ export type PipelineContext = {
   dailyAtRiskSol: number;
   openCostByMint: Record<string, number>;
   openPositionsCount: number;
+  momentumByMint?: Record<string, number>;
 };
 
 function clamp(n: number, lo: number, hi: number): number {
@@ -467,15 +469,18 @@ export function computeScore(parts: {
   curve: number;
   wallets: number;
   timing?: number;
+  momentum?: number;
 }): { scores: PipelineScores; riskInverse: number } {
   const riskInverse = clamp(1 - parts.riskScore / 10, 0, 1);
   const timing = parts.timing ?? 0;
+  const momentum = clamp(parts.momentum ?? 0, 0, 1);
   const total =
     riskInverse * SCORE_WEIGHTS.risk_inverse +
     parts.social * SCORE_WEIGHTS.social_signal +
     parts.narrative * SCORE_WEIGHTS.narrative_fit +
     parts.curve * SCORE_WEIGHTS.curve_health +
-    parts.wallets * SCORE_WEIGHTS.wallet_diversity;
+    parts.wallets * SCORE_WEIGHTS.wallet_diversity +
+    momentum * SCORE_WEIGHTS.momentum;
   return {
     riskInverse,
     scores: {
@@ -486,6 +491,7 @@ export function computeScore(parts: {
       curve_health: round4(parts.curve),
       wallet_diversity: round4(parts.wallets),
       timing: round4(timing),
+      momentum: round4(momentum),
       total: round4(total),
     },
   };
@@ -577,6 +583,7 @@ export function evaluateCoin(
         curve_health: 0,
         wallet_diversity: 0,
         timing: 0,
+        momentum: 0,
         total: 0,
       },
     };
@@ -587,6 +594,7 @@ export function evaluateCoin(
   const curve = scoreCurveHealth(metrics);
   const wallets = scoreWalletDiversity(metrics);
   const timing = scoreTiming(ctx);
+  const momentum = ctx.momentumByMint?.[coin.mint] ?? 0;
   const { scores } = computeScore({
     riskScore: risk.riskScore,
     social,
@@ -594,6 +602,7 @@ export function evaluateCoin(
     curve,
     wallets,
     timing: timing.score,
+    momentum,
   });
 
   const reasons = reasonsNotToBuy({
@@ -703,6 +712,7 @@ export function evaluateLaunchBatch(
     openCostByMint: Record<string, number>;
     openPositionsCount: number;
     now?: number;
+    momentumByMint?: Record<string, number>;
   },
 ): PipelineDecision[] {
   const now = extras.now ?? Date.now();
@@ -715,6 +725,7 @@ export function evaluateLaunchBatch(
     dailyAtRiskSol: extras.dailyAtRiskSol,
     openCostByMint: extras.openCostByMint,
     openPositionsCount: extras.openPositionsCount,
+    momentumByMint: extras.momentumByMint ?? {},
   };
   const out: PipelineDecision[] = [];
   for (const coin of coins) {

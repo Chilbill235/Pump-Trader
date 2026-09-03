@@ -6,7 +6,7 @@ import { useState } from "react";
 import { SOLSCAN_TX, TOKEN_DECIMALS } from "@/lib/constants";
 import { lamportsToSol, solToLamports, tokensToUi, uiToTokens } from "@/lib/format";
 import { upsertPositionFromFill } from "@/lib/positions";
-import { quoteTrade } from "@/lib/sdk";
+import { friendlyOnchainError, quoteTrade } from "@/lib/sdk";
 import { simulateAndSend } from "@/lib/trade";
 import {
   MIN_BUY_SOL,
@@ -98,15 +98,23 @@ export function TradePanel(props: {
           );
         }
       }
-      const { receipt, quote: filled } = await simulateAndSend({
-        connection,
-        wallet,
-        mint: props.mint,
-        side,
-        slippagePct: settings.slippagePct,
-        paper: settings.simulateMode,
-        ...parsed,
-      });
+let receipt;
+      let filled;
+      try {
+        const result = await simulateAndSend({
+          connection,
+          wallet,
+          mint: props.mint,
+          side,
+          slippagePct: settings.slippagePct,
+          paper: settings.simulateMode,
+          ...parsed,
+        });
+        receipt = result.receipt;
+        filled = result.quote;
+      } catch (inner) {
+        throw new Error(friendlyOnchainError(inner, props.mint));
+      }
       setQuote(filled);
       upsertPositionFromFill({
         mint: props.mint,

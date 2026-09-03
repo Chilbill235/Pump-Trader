@@ -16,7 +16,7 @@ import {
   MIN_SOL_RESERVED_FOR_FEES,
   validateBuyAmount,
 } from "@/lib/trade-limits";
-import { shortenAddress, solToLamports, timeAgo } from "@/lib/format";
+import { shortenAddress, timeAgo } from "@/lib/format";
 import {
   appendPipelineLog,
   dailyAtRiskSol,
@@ -37,6 +37,7 @@ import {
   evaluateLaunchBatch,
 } from "@/lib/pipeline";
 import { loadPositions, upsertPositionFromFill } from "@/lib/positions";
+import { recordMomentumSample, type CoinMomentum } from "@/lib/momentum";
 import { DUMMY_USER, quoteTrade } from "@/lib/sdk";
 import { simulateAndSend } from "@/lib/trade";
 import type { PipelineCandidate, PipelineLogEntry, PumpCoin } from "@/lib/types";
@@ -74,6 +75,7 @@ export function WatchView() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [receiptNote, setReceiptNote] = useState<string | null>(null);
   const [liveConfirm, setLiveConfirm] = useState<PipelineCandidate | null>(null);
+  const [popping, setPopping] = useState<CoinMomentum[]>([]);
   const seenRef = useRef<Map<string, PipelineLogEntry>>(new Map());
 
   useEffect(() => {
@@ -92,11 +94,16 @@ export function WatchView() {
       const pending = loadCandidates();
       const pendingSol = pending.reduce((s, c) => s + c.sizeSol, 0);
       const positions = loadPositions();
+      const freshPopping = recordMomentumSample(list);
+      setPopping(freshPopping);
+      const momentumByMint: Record<string, number> = {};
+      for (const m of freshPopping) momentumByMint[m.mint] = m.score;
       const decisions = evaluateLaunchBatch(list, settings, {
         dailyAtRiskSol: dailyAtRiskSol(now) + pendingSol,
         openCostByMint: openCostByMint(),
         openPositionsCount: positions.length,
         now,
+        momentumByMint,
       });
       let nextLog = log;
       let nextCandidates = pending;
@@ -480,6 +487,41 @@ export function WatchView() {
         </pre>
       ) : null}
       {receiptNote ? <p className="text-xs text-neon">{receiptNote}</p> : null}
+
+      {popping.length > 0 ? (
+        <section className="rounded border border-warn/40 bg-warn/5 p-3">
+          <header className="mb-2 flex items-center justify-between">
+            <h2 className="font-mono text-xs uppercase tracking-wide text-warn">
+              Popping right now · {popping.length}
+            </h2>
+            <p className="font-mono text-[11px] text-mute">
+              Largest mc / trade density gain in the last ~90s. Click to inspect.
+            </p>
+          </header>
+          <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {popping.map((m) => (
+              <li
+                key={m.mint}
+                className="flex items-center gap-2 rounded border border-warn/30 bg-ink-900 p-2"
+              >
+                <CoinImage src={m.imageUri ?? null} alt={m.symbol} size={28} />
+                <div className="min-w-0 flex-1">
+                  <Link
+                    href={`/coin/${m.mint}`}
+                    className="block truncate text-sm hover:text-neon"
+                  >
+                    {m.name}{" "}
+                    <span className="font-mono text-[11px] text-mute">{m.symbol}</span>
+                  </Link>
+                  <p className="font-mono text-[11px] text-mute">
+                    +{m.deltaPct.toFixed(1)}% mc · {m.recentTrades} trades · score {(m.score * 100).toFixed(0)}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <section className="rounded border border-line bg-ink-800">

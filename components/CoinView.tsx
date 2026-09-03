@@ -9,7 +9,7 @@ import { friendlyOnchainError, fetchCoinOnchain } from "@/lib/sdk";
 import type { CoinOnchain, PumpCoin } from "@/lib/types";
 import { CoinImage } from "./CoinImage";
 import { CopyButton } from "./CopyButton";
-import { TradePanel } from "./TradePanel";
+import { QuickTradePanel } from "./QuickTradePanel";
 
 export function CoinView({ mint }: { mint: string }) {
   const { connection } = useConnection();
@@ -163,7 +163,7 @@ export function CoinView({ mint }: { mint: string }) {
           ) : null}
         </div>
       </section>
-      <TradePanel mint={mint} name={name} symbol={symbol} />
+      <QuickTradePanel mint={mint} name={name} symbol={symbol} imageUri={meta?.imageUri} />
     </div>
   );
 }

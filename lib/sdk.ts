@@ -107,7 +107,9 @@ export function isLikelyNotPumpCoin(err: unknown): boolean {
     /expected.{0,30}length/i.test(msg) ||
     /deserialize/i.test(msg) ||
     /invalid account data/i.test(msg) ||
-    /Account not found/i.test(msg)
+    /Account not found/i.test(msg) ||
+    /pool account not found/i.test(msg) ||
+    /BondingCurveNotFound/i.test(msg)
   );
 }
 

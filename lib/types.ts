@@ -113,6 +113,7 @@ export type PipelineScores = {
   curve_health: number;
   wallet_diversity: number;
   timing: number;
+  momentum: number;
   total: number;
 };
 
