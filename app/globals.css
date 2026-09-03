@@ -17,6 +17,7 @@ body {
   font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   -webkit-tap-highlight-color: transparent;
   -webkit-text-size-adjust: 100%;
+  overscroll-behavior-y: contain;
 }
 
 /* Respect iOS safe areas for the sticky header / bottom sheet. */
@@ -36,8 +37,17 @@ body {
   input[type="number"],
   input[type="password"],
   input[type="search"],
-  select {
+  select,
+  textarea {
     font-size: 16px; /* prevents iOS Safari zoom-on-focus */
+  }
+  button {
+    touch-action: manipulation;
+  }
+  /* Ensure fixed/overlay modals truly cover the viewport even when the
+     browser address bar resizes. dvh is supported in iOS 15.4+ / Chrome 108+. */
+  .mobile-fullscreen {
+    height: 100dvh;
   }
 }
 
@@ -55,8 +65,8 @@ body {
 
 .wallet-adapter-modal-wrapper {
   background: #0d1017 !important;
-  /* Mobile: push modal to bottom for one-handed reach. */
   align-items: flex-end !important;
+  z-index: 9999 !important;
 }
 @media (min-width: 640px) {
   .wallet-adapter-modal-wrapper {
@@ -67,11 +77,36 @@ body {
 .wallet-adapter-modal-container {
   max-width: 100% !important;
   border-radius: 12px 12px 0 0 !important;
+  background: #0d1017 !important;
+  color: #e8eaed !important;
+  max-height: 92vh !important;
+  max-height: 92dvh !important;
 }
 @media (min-width: 640px) {
   .wallet-adapter-modal-container {
     border-radius: 12px !important;
+    max-width: 420px !important;
   }
+}
+
+.wallet-adapter-modal-title {
+  color: #e8eaed !important;
+}
+
+.wallet-adapter-modal-list li {
+  background: #141824 !important;
+  color: #e8eaed !important;
+}
+.wallet-adapter-modal-list li:hover {
+  background: #1c2230 !important;
+}
+
+.wallet-adapter-modal-middle {
+  padding-bottom: env(safe-area-inset-bottom) !important;
+}
+
+.wallet-adapter-modal-button-close {
+  background: #141824 !important;
 }
 
 input[type="number"]::-webkit-outer-spin-button,
@@ -92,4 +127,13 @@ input[type="number"]::-webkit-inner-spin-button {
 /* In-app browser banner indicator (set by WalletProvider). */
 body[data-in-app-browser="1"] header {
   border-bottom-color: rgba(57, 255, 136, 0.4);
+}
+
+/* Make the app shell container mobile-friendly by default. */
+@supports (-webkit-touch-callout: none) {
+  /* iOS-only: prevent rubber-band scroll from shifting modals. */
+  body.modal-open {
+    position: fixed;
+    width: 100%;
+  }
 }

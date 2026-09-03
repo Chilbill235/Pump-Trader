@@ -14,9 +14,12 @@ import {
 } from "@/lib/positions";
 import { loadWalletPortfolio, type WalletToken } from "@/lib/portfolio";
 import { quoteTrade } from "@/lib/sdk";
+import { getSolUsd, quoteTokenToSol } from "@/lib/token-value";
+import { fetchJupiterUsdPrice, getKnownTokenMeta } from "@/lib/jupiter";
 import type { Position } from "@/lib/types";
 import { CoinImage } from "./CoinImage";
 import { CopyButton } from "./CopyButton";
+import { QuickTradePanel } from "./QuickTradePanel";
 import { useSettings } from "./SettingsProvider";
 import { useActiveAccountId } from "./AccountsProvider";
 
@@ -28,9 +31,12 @@ type Holding = WalletToken & {
   imageUri?: string;
   source: "cache" | "lookup" | "unknown";
   valueLamports: string | null;
-  costLamports: string | null;
+  valueUsd: number | null;
+  isPumpCoin: boolean;
   err?: string;
 };
+
+const SOL_MINT = "So11111111111111111111111111111111111111112";
 
 export function PositionsView() {
   const { connection } = useConnection();
@@ -44,6 +50,8 @@ export function PositionsView() {
   const [holdingsLoading, setHoldingsLoading] = useState(false);
   const [sol, setSol] = useState<number | null>(null);
   const [solErr, setSolErr] = useState<string | null>(null);
+  const [solUsd, setSolUsd] = useState<number | null>(null);
+  const [tradeMint, setTradeMint] = useState<string | null>(null);
 
   const refreshLocal = useCallback(async () => {
     if (!accountId) {
@@ -94,40 +102,73 @@ export function PositionsView() {
           return null;
         }
       });
-      const eligible = tokens.filter((t) => t.mint !== "So11111111111111111111111111111111111111112");
+      const eligible = tokens.filter((t) => t.mint !== SOL_MINT);
+      // Fall back to the well-known token list (USDC, USDT, BONK, JUP, …) when
+      // the pump-fun metadata endpoint returns nothing.
+      const enrichedMeta = eligible.map((t) => {
+        if (t.source !== "unknown") return t;
+        const known = getKnownTokenMeta(t.mint);
+        if (known) {
+          return {
+            ...t,
+            name: known.name,
+            symbol: known.symbol,
+            source: "lookup" as const,
+          };
+        }
+        return t;
+      });
+      const usd = solUsd ?? (await getSolUsd());
       const valued = await Promise.all(
-        eligible.map(async (t) => {
+        enrichedMeta.map(async (t): Promise<Holding> => {
           try {
-            const q = await quoteTrade({
+            const q = await quoteTokenToSol({
               connection,
               mint: t.mint,
+              tokenAmountRaw: t.amount,
               user: publicKey,
-              side: "sell",
-              tokenAmountRaw: new BN(Math.round(t.amount)),
               slippagePct: settings.slippagePct,
+              solUsd: usd,
             });
             return {
               ...t,
               valueLamports: q.solLamports,
-              costLamports: null,
+              valueUsd: q.usd,
+              isPumpCoin: q.isPumpCoin,
+              err: q.error,
             } satisfies Holding;
           } catch (err) {
             return {
               ...t,
               valueLamports: null,
-              costLamports: null,
+              valueUsd: null,
+              isPumpCoin: false,
               err: err instanceof Error ? err.message : String(err),
             } satisfies Holding;
           }
         }),
       );
+      // also fetch a USD price for any holding that came back with USD=null
+      const needUsd = valued
+        .filter((h) => h.valueUsd == null && !h.err)
+        .map((h) => h.mint);
+      if (needUsd.length > 0) {
+        const prices = await fetchJupiterUsdPrice(needUsd);
+        for (const h of valued) {
+          if (h.valueUsd != null) continue;
+          const p = prices[h.mint];
+          if (p != null && Number.isFinite(p) && Number.isFinite(h.uiAmount)) {
+            h.valueUsd = p * h.uiAmount;
+          }
+        }
+      }
       setHoldings(valued);
     } catch (err) {
       setHoldingsErr(err instanceof Error ? err.message : String(err));
     } finally {
       setHoldingsLoading(false);
     }
-  }, [connection, publicKey, settings.slippagePct]);
+  }, [connection, publicKey, settings.slippagePct, solUsd]);
 
   useEffect(() => {
     void refreshLocal();
@@ -144,6 +185,16 @@ export function PositionsView() {
     const id = setInterval(() => void refreshWallet(), 20_000);
     return () => clearInterval(id);
   }, [publicKey, refreshWallet]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getSolUsd().then((v) => {
+      if (!cancelled) setSolUsd(v);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const key = publicKey;
@@ -180,6 +231,14 @@ export function PositionsView() {
     };
   }, [connection, publicKey]);
 
+  const totalSol = sol ?? 0;
+  const totalHoldingsSol = holdings.reduce((s, h) => {
+    if (h.valueLamports) return s + Number(lamportsToSol(new BN(h.valueLamports)));
+    if (h.valueUsd != null && solUsd != null && solUsd > 0) return s + h.valueUsd / solUsd;
+    return s;
+  }, 0);
+  const totalUsd = (totalSol + totalHoldingsSol) * (solUsd ?? 0);
+
   return (
     <div className="space-y-4">
       <div>
@@ -190,10 +249,22 @@ export function PositionsView() {
         </p>
       </div>
       <div className="rounded border border-line bg-ink-800 p-3 font-mono text-sm">
-        Wallet SOL:{" "}
-        {solErr ? <span className="text-danger">{solErr}</span> : sol == null ? "—" : `${sol.toFixed(4)} SOL`}
-        {connected ? (
-          <span className="ml-3 text-mute">{shortenAddress(publicKey!.toBase58(), 6, 6)}</span>
+        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+          <span>
+            Wallet SOL:{" "}
+            {solErr ? <span className="text-danger">{solErr}</span> : sol == null ? "—" : `${sol.toFixed(4)} SOL`}
+            {solUsd != null && sol != null ? (
+              <span className="ml-1 text-mute">≈ ${(sol * solUsd).toFixed(2)}</span>
+            ) : null}
+          </span>
+          {connected ? (
+            <span className="text-mute">{shortenAddress(publicKey!.toBase58(), 6, 6)}</span>
+          ) : null}
+        </div>
+        {connected && (holdings.length > 0 || totalSol > 0) && solUsd != null ? (
+          <p className="mt-1 text-[11px] text-mute">
+            Total ≈ {totalSol.toFixed(4)} + {totalHoldingsSol.toFixed(4)} holdings = {(totalSol + totalHoldingsSol).toFixed(4)} SOL · ${totalUsd.toFixed(2)}
+          </p>
         ) : null}
       </div>
 
@@ -225,11 +296,47 @@ export function PositionsView() {
             ) : (
               <ul className="divide-y divide-line">
                 {holdings.map((h) => (
-                  <HoldingRow key={h.mint} holding={h} />
+                  <HoldingRow
+                    key={h.mint}
+                    holding={h}
+                    onTrade={() => setTradeMint(h.mint)}
+                    solUsd={solUsd}
+                  />
                 ))}
               </ul>
             )}
+            <p className="border-t border-line/60 px-3 py-2 text-[11px] text-mute">
+              Tap a token to trade. Pump.fun bonding-curve / pump-amm coins use the pump program.
+              Everything else (USDC, BONK, JUP, memecoins, etc.) routes through Jupiter so you can
+              buy or sell using any token in your wallet that has enough balance.
+            </p>
           </section>
+
+          {tradeMint ? (
+            <section className="rounded border border-line bg-ink-800 p-3">
+              <header className="mb-2 flex items-center justify-between">
+                <h2 className="font-mono text-xs uppercase tracking-wide text-mute">
+                  Trade · {shortenAddress(tradeMint, 6, 6)}
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setTradeMint(null)}
+                  className="font-mono text-[11px] text-mute hover:text-danger"
+                >
+                  close
+                </button>
+              </header>
+              <QuickTradePanel
+                mint={tradeMint}
+                name={holdings.find((h) => h.mint === tradeMint)?.name}
+                symbol={holdings.find((h) => h.mint === tradeMint)?.symbol}
+                imageUri={holdings.find((h) => h.mint === tradeMint)?.imageUri}
+                initialSide="sell"
+                onClose={() => setTradeMint(null)}
+                holdings={holdings}
+              />
+            </section>
+          ) : null}
 
           <section>
             <h2 className="mb-2 font-mono text-xs uppercase tracking-wide text-mute">
@@ -295,10 +402,24 @@ export function PositionsView() {
   );
 }
 
-function HoldingRow({ holding }: { holding: Holding }) {
+function HoldingRow({
+  holding,
+  onTrade,
+  solUsd,
+}: {
+  holding: Holding;
+  onTrade: () => void;
+  solUsd: number | null;
+}) {
   const value = holding.valueLamports ? new BN(holding.valueLamports) : null;
+  const valueUsd = holding.valueUsd;
+  const usd = valueUsd != null
+    ? valueUsd
+    : value && solUsd != null
+      ? Number(lamportsToSol(value)) * solUsd
+      : null;
   return (
-    <li className="flex items-center gap-3 px-3 py-2">
+    <li className="flex flex-wrap items-center gap-2 px-3 py-2 sm:flex-nowrap sm:gap-3">
       <CoinImage src={holding.imageUri ?? null} alt={holding.symbol} size={32} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-2">
@@ -310,23 +431,45 @@ function HoldingRow({ holding }: { holding: Holding }) {
             {tokensToUi(new BN(Math.round(holding.amount)), holding.decimals)} {holding.symbol}
           </span>
         </div>
-        <div className="flex items-center gap-2 font-mono text-[11px] text-mute">
+        <div className="flex flex-wrap items-center gap-2 font-mono text-[11px] text-mute">
           {shortenAddress(holding.mint, 6, 6)}
           <CopyButton value={holding.mint} label="copy" />
           {holding.source === "unknown" ? (
             <span className="rounded bg-warn/10 px-1 py-0.5 text-[10px] text-warn">no meta</span>
           ) : null}
+          {holding.isPumpCoin ? (
+            <span className="rounded bg-neon/10 px-1 py-0.5 text-[10px] text-neon">pump</span>
+          ) : (
+            <span className="rounded bg-ink-700 px-1 py-0.5 text-[10px] text-mute">jupiter</span>
+          )}
         </div>
       </div>
       <div className="text-right font-mono text-xs">
         {value ? (
-          <span>{lamportsToSol(value)} SOL</span>
+          <p>
+            {lamportsToSol(value)} SOL
+            {usd != null ? <span className="block text-[11px] text-mute">≈ ${usd.toFixed(2)}</span> : null}
+          </p>
+        ) : usd != null ? (
+          <p>
+            ${usd.toFixed(2)}
+            <span className="block text-[11px] text-mute">price feed</span>
+          </p>
         ) : holding.err ? (
-          <span className="text-danger">err</span>
+          <span className="text-warn" title={holding.err}>
+            no quote
+          </span>
         ) : (
           <span className="text-mute">…</span>
         )}
       </div>
+      <button
+        type="button"
+        onClick={onTrade}
+        className="shrink-0 rounded border border-line px-2 py-1 font-mono text-[11px] text-mute hover:border-neon hover:text-neon"
+      >
+        Trade
+      </button>
     </li>
   );
 }

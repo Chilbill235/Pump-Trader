@@ -7,7 +7,8 @@ import { ALERTS_KEY, TPSL_FIRED_KEY } from "@/lib/constants";
 import { safeReadScoped, safeWriteScoped } from "@/lib/accounts";
 import { appendBotLog } from "@/lib/bot-log";
 import { loadPositions, pnlPct, upsertPositionFromFill } from "@/lib/positions";
-import { quoteTrade } from "@/lib/sdk";
+import { quoteTrade, isLikelyNotPumpCoin } from "@/lib/sdk";
+import { quoteTokenToSol } from "@/lib/token-value";
 import { simulateAndSend } from "@/lib/trade";
 import type { AppAlert, Position } from "@/lib/types";
 import { useSettings } from "./SettingsProvider";
@@ -58,15 +59,37 @@ export function TpSlWatcher() {
 
     async function checkOne(p: Position) {
       try {
-        const q = await quoteTrade({
-          connection,
-          mint: p.mint,
-          user: wallet.publicKey,
-          side: "sell",
-          tokenAmountRaw: new BN(p.tokenAmountRaw),
-          slippagePct: settings.slippagePct,
-        });
-        const pnl = pnlPct(new BN(p.costLamports), new BN(q.solLamports));
+        let solLamports: string | null = null;
+        try {
+          const q = await quoteTrade({
+            connection,
+            mint: p.mint,
+            user: wallet.publicKey,
+            side: "sell",
+            tokenAmountRaw: new BN(p.tokenAmountRaw),
+            slippagePct: settings.slippagePct,
+          });
+          solLamports = q.solLamports;
+        } catch (err) {
+          if (!isLikelyNotPumpCoin(err)) {
+            // transient pump error → skip this tick
+            return;
+          }
+          // non-pump position: try Jupiter price feed for value
+          const v = await quoteTokenToSol({
+            connection,
+            mint: p.mint,
+            tokenAmountRaw: p.tokenAmountRaw,
+            user: wallet.publicKey,
+            slippagePct: settings.slippagePct,
+          });
+          if (!v.usd || !v.solLamports) {
+            return; // not enough data to evaluate TP/SL
+          }
+          solLamports = v.solLamports;
+        }
+        if (!solLamports) return;
+        const pnl = pnlPct(new BN(p.costLamports), new BN(solLamports));
         let kind: AppAlert["kind"] | null = null;
         if (p.takeProfitPct != null && pnl >= p.takeProfitPct) kind = "take-profit";
         else if (p.stopLossPct != null && pnl <= -Math.abs(p.stopLossPct)) kind = "stop-loss";

@@ -30,7 +30,7 @@ import {
 import { BOT_SESSION_KEY } from "@/lib/constants";
 import { safeReadScoped, removeScoped } from "@/lib/accounts";
 import { loadPositions, pnlPct } from "@/lib/positions";
-import { quoteTrade } from "@/lib/sdk";
+import { quoteTokenToSol } from "@/lib/token-value";
 import {
   DEFAULT_BANKROLL_CONFIG,
   evaluateBankroll,
@@ -133,24 +133,27 @@ export function BotView() {
       positions.map(async (p) => {
         const costSol = bnToSol(new BN(p.costLamports));
         try {
-          const q = await quoteTrade({
+          const q = await quoteTokenToSol({
             connection,
             mint: p.mint,
+            tokenAmountRaw: p.tokenAmountRaw,
             user: wallet.publicKey,
-            side: "sell",
-            tokenAmountRaw: new BN(p.tokenAmountRaw),
             slippagePct: settings.slippagePct,
+            solUsd: solUsd,
           });
-          const valueSol = bnToSol(new BN(q.solLamports));
-          const pct = pnlPct(new BN(p.costLamports), new BN(q.solLamports));
-          return {
-            mint: p.mint,
-            symbol: p.symbol,
-            name: p.name,
-            pnlPct: pct,
-            valueSol,
-            costSol,
-          };
+          if (q.solLamports) {
+            const valueSol = Number(new BN(q.solLamports).toString()) / 1e9;
+            const pct = pnlPct(new BN(p.costLamports), new BN(q.solLamports));
+            return {
+              mint: p.mint,
+              symbol: p.symbol,
+              name: p.name,
+              pnlPct: pct,
+              valueSol,
+              costSol,
+            };
+          }
+          return { mint: p.mint, symbol: p.symbol, name: p.name, pnlPct: null, valueSol: null, costSol };
         } catch {
           return { mint: p.mint, symbol: p.symbol, name: p.name, pnlPct: null, valueSol: null, costSol };
         }
@@ -167,7 +170,7 @@ export function BotView() {
       }
     });
     lastEquitiesRef.current = current;
-  }, [connection, wallet.publicKey, settings.slippagePct, accountId]);
+  }, [connection, wallet.publicKey, settings.slippagePct, accountId, solUsd]);
 
   useEffect(() => {
     void refreshPositions();

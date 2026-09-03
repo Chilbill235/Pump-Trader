@@ -2,11 +2,12 @@
 
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import BN from "bn.js";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Connection, PublicKey } from "@solana/web3.js";
 import { SOLSCAN_TX, TOKEN_DECIMALS } from "@/lib/constants";
-import { lamportsToSol, tokensToUi } from "@/lib/format";
+import { lamportsToSol, shortenAddress, tokensToUi, uiToTokens } from "@/lib/format";
 import { upsertPositionFromFill } from "@/lib/positions";
-import { friendlyOnchainError, quoteTrade } from "@/lib/sdk";
+import { friendlyOnchainError, isLikelyNotPumpCoin, quoteTrade } from "@/lib/sdk";
 import { simulateAndSend } from "@/lib/trade";
 import {
   MIN_BUY_SOL,
@@ -18,6 +19,24 @@ import { CoinImage } from "./CoinImage";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { useSettings } from "./SettingsProvider";
 import { useActiveAccountId } from "./AccountsProvider";
+import {
+  fetchJupiterQuote,
+  fetchJupiterUsdPrice,
+  jupiterSimulateAndSend,
+  shortTokenLabel,
+  type JupiterQuote,
+} from "@/lib/jupiter";
+import { fetchMintDecimals } from "@/lib/token-value";
+import type { WalletToken } from "@/lib/portfolio";
+
+type HoldingLike = WalletToken & {
+  name: string;
+  symbol: string;
+  imageUri?: string;
+  source: "cache" | "lookup" | "unknown";
+};
+
+type Venue = "bonding-curve" | "pump-amm" | "jupiter";
 
 type Props = {
   mint: string;
@@ -28,6 +47,12 @@ type Props = {
   onClose?: () => void;
   /** Compact mode for use inside modals on the markets list. */
   compact?: boolean;
+  /**
+   * If the parent already has the wallet's token holdings, pass them here so
+   * the user can pick the input/output mint (USDC, BONK, SOL, etc.) instead of
+   * being forced to use SOL.
+   */
+  holdings?: HoldingLike[];
 };
 
 type ErrorHint = {
@@ -35,6 +60,27 @@ type ErrorHint = {
   detail: string;
   fixes: string[];
 };
+
+type QuoteView = {
+  venue: Venue;
+  inMint: string;
+  inSymbol: string;
+  inDecimals: number;
+  inAmountRaw: string;
+  outMint: string;
+  outSymbol: string;
+  outDecimals: number;
+  outAmountRaw: string;
+  priceImpactPct: number | null;
+  feesLamports: string;
+  usdValue: number | null;
+  notes: string[];
+  /** Pump-program specific flag (kept for UI labelling). */
+  graduated: boolean;
+};
+
+const SOL_MINT = "So11111111111111111111111111111111111111112";
+const FALLBACK_DECIMALS = 9;
 
 function classifyError(raw: string): ErrorHint {
   const lower = raw.toLowerCase();
@@ -111,14 +157,15 @@ function classifyError(raw: string): ErrorHint {
       fixes: ["Approve the transaction in Phantom to send it."],
     };
   }
-  if (lower.includes("403") || lower.includes("forbidden")) {
+  if (lower.includes("403") || lower.includes("forbidden") || lower.includes("429")) {
     return {
-      title: "RPC blocked your request",
+      title: "RPC / aggregator rate-limited",
       detail: raw,
       fixes: [
-        "The public mainnet RPC is rate-limited.",
+        "The public mainnet RPC and free aggregator endpoints are rate-limited.",
         "Set a private RPC in Settings (Helius, QuickNode, Triton).",
         "Set NEXT_PUBLIC_SOLANA_RPC_URL in your .env.local.",
+        "Wait a few seconds and try again.",
       ],
     };
   }
@@ -129,6 +176,17 @@ function classifyError(raw: string): ErrorHint {
       fixes: [
         "This trade needs the pump-amm pool, not the bonding curve.",
         "Refresh — the quote will switch venues automatically.",
+      ],
+    };
+  }
+  if (lower.includes("no route") || lower.includes("could not find")) {
+    return {
+      title: "No route found",
+      detail: raw,
+      fixes: [
+        "Jupiter could not find a route for this pair right now.",
+        "Try a different input token (SOL, USDC).",
+        "Retry in a few seconds — routes update continuously.",
       ],
     };
   }
@@ -143,6 +201,15 @@ function classifyError(raw: string): ErrorHint {
   };
 }
 
+function isPumpTokenError(err: unknown): boolean {
+  if (isLikelyNotPumpCoin(err)) return true;
+  if (err instanceof Error) {
+    const m = err.message.toLowerCase();
+    if (m.includes("doesn't look like a pump")) return true;
+  }
+  return false;
+}
+
 export function QuickTradePanel(props: Props) {
   const { connection } = useConnection();
   const wallet = useWallet();
@@ -154,11 +221,33 @@ export function QuickTradePanel(props: Props) {
   const [side, setSide] = useState<"buy" | "sell">(props.initialSide ?? "buy");
   const [amount, setAmount] = useState(props.initialSide === "sell" ? "1000000" : "0.02");
   const [busy, setBusy] = useState(false);
-  const [quote, setQuote] = useState<{ tokensOut: string; solOut: string; fees: string; impact: number | null; venue: string; graduated: boolean } | null>(null);
+  const [quote, setQuote] = useState<QuoteView | null>(null);
   const [errorInfo, setErrorInfo] = useState<ErrorHint | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [receipt, setReceipt] = useState<{ note: string; url?: string } | null>(null);
   const [solPrice, setSolPrice] = useState<number | null>(null);
+  const [outDecimals, setOutDecimals] = useState<number>(decimals);
+  const [pumpSupported, setPumpSupported] = useState<boolean | null>(null);
+  const [inMint, setInMint] = useState<string>(SOL_MINT);
+  const [inDecimals, setInDecimals] = useState<number>(9);
+  const [inBalance, setInBalance] = useState<number | null>(null);
+
+  const inputOptions = useMemo(() => {
+    const opts: Array<{ mint: string; symbol: string; balance: number | null }> = [
+      { mint: SOL_MINT, symbol: "SOL", balance: null },
+    ];
+    const seen = new Set([SOL_MINT]);
+    for (const h of props.holdings ?? []) {
+      if (seen.has(h.mint)) continue;
+      seen.add(h.mint);
+      opts.push({
+        mint: h.mint,
+        symbol: shortTokenLabel(h.mint, h.symbol),
+        balance: Number.isFinite(h.amount) ? h.amount : null,
+      });
+    }
+    return opts;
+  }, [props.holdings]);
 
   useEffect(() => {
     fetch("/api/sol-price", { cache: "no-store" })
@@ -169,15 +258,135 @@ export function QuickTradePanel(props: Props) {
       .catch(() => undefined);
   }, []);
 
-  function parsedAmounts(): { solLamports?: BN; tokenAmountRaw?: BN } {
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const d = await fetchMintDecimals(connection, props.mint);
+        if (!cancelled) setOutDecimals(d);
+      } catch {
+        if (!cancelled) setOutDecimals(TOKEN_DECIMALS);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [connection, props.mint]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const probe = await quoteTrade({
+          connection,
+          mint: props.mint,
+          user: wallet.publicKey ?? null,
+          side: "sell",
+          tokenAmountRaw: new BN(1),
+          slippagePct: settings.slippagePct,
+        });
+        if (!cancelled) {
+          setPumpSupported(true);
+          setQuote((q) =>
+            q && q.venue !== "jupiter"
+              ? { ...q, graduated: probe.graduated, venue: probe.venue }
+              : q,
+          );
+        }
+      } catch (err) {
+        if (cancelled) return;
+        if (isPumpTokenError(err)) {
+          setPumpSupported(false);
+        } else {
+          setPumpSupported(null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [connection, props.mint, wallet.publicKey, settings.slippagePct]);
+
+  // Track input mint decimals and balance
+  useEffect(() => {
+    let cancelled = false;
+    if (inMint === SOL_MINT) {
+      setInDecimals(9);
+      return;
+    }
+    void (async () => {
+      try {
+        const d = await fetchMintDecimals(connection, inMint);
+        if (!cancelled) setInDecimals(d);
+      } catch {
+        if (!cancelled) setInDecimals(FALLBACK_DECIMALS);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [connection, inMint]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (inMint === SOL_MINT) {
+      if (wallet.publicKey) {
+        void connection
+          .getBalance(wallet.publicKey, "confirmed")
+          .then((l) => {
+            if (!cancelled) setInBalance(l / 1e9);
+          })
+          .catch(() => {
+            if (!cancelled) setInBalance(null);
+          });
+      } else {
+        setInBalance(null);
+      }
+      return () => {
+        cancelled = true;
+      };
+    }
+    // SPL balance
+    (async () => {
+      try {
+        const resp = await connection.getParsedTokenAccountsByOwner(
+          new PublicKey(wallet.publicKey!.toBase58()),
+          { programId: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA") },
+        );
+        let found: number | null = null;
+        for (const acc of resp.value) {
+          const mint = (acc.account.data as { parsed?: { info?: { mint?: string; tokenAmount?: { uiAmount?: number } } } })
+            ?.parsed?.info?.mint;
+          if (mint === inMint) {
+            const ui = (acc.account.data as { parsed?: { info?: { tokenAmount?: { uiAmount?: number } } } })
+              ?.parsed?.info?.tokenAmount?.uiAmount;
+            if (typeof ui === "number") found = ui;
+            break;
+          }
+        }
+        if (!cancelled) setInBalance(found);
+      } catch {
+        if (!cancelled) setInBalance(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [connection, inMint, wallet.publicKey]);
+
+  const inSymbol = useMemo(() => {
+    return shortTokenLabel(inMint, inputOptions.find((o) => o.mint === inMint)?.symbol);
+  }, [inMint, inputOptions]);
+
+  function parsedAmounts(): { inRaw: BN; outRaw?: BN } {
     if (side === "buy") {
       const v = validateBuyAmount(amount);
       if (!v.ok || !v.lamports) throw new Error(v.error ?? "Invalid SOL amount.");
-      return { solLamports: v.lamports };
+      return { inRaw: v.lamports };
     }
-    const v = validateSellAmount(amount, decimals);
+    const v = validateSellAmount(amount, outDecimals);
     if (!v.ok || !v.raw) throw new Error(v.error ?? "Invalid token amount.");
-    return { tokenAmountRaw: v.raw };
+    return { inRaw: v.raw };
   }
 
   async function runQuote() {
@@ -186,30 +395,124 @@ export function QuickTradePanel(props: Props) {
     setReceipt(null);
     try {
       const parsed = parsedAmounts();
-      const q = await quoteTrade({
-        connection,
-        mint: props.mint,
-        user: wallet.publicKey,
-        side,
-        slippagePct: settings.slippagePct,
-        ...parsed,
-      });
+      const outSymbol = symbol;
+      // Decide venue
+      const tryPump = pumpSupported !== false && inMint === SOL_MINT;
+      if (tryPump) {
+        try {
+          if (side === "buy") {
+            const q = await quoteTrade({
+              connection,
+              mint: props.mint,
+              user: wallet.publicKey,
+              side,
+              solLamports: parsed.inRaw,
+              slippagePct: settings.slippagePct,
+            });
+            setQuote({
+              venue: q.venue,
+              inMint: SOL_MINT,
+              inSymbol: "SOL",
+              inDecimals: 9,
+              inAmountRaw: parsed.inRaw.toString(),
+              outMint: props.mint,
+              outSymbol,
+              outDecimals,
+              outAmountRaw: q.tokenAmountRaw,
+              priceImpactPct: q.priceImpactBps == null ? null : q.priceImpactBps / 100,
+              feesLamports: q.feesLamports,
+              usdValue: solPrice != null ? Number(lamportsToSol(parsed.inRaw)) * solPrice : null,
+              notes: q.notes,
+              graduated: q.graduated,
+            });
+            return;
+          }
+          const q = await quoteTrade({
+            connection,
+            mint: props.mint,
+            user: wallet.publicKey,
+            side,
+            tokenAmountRaw: parsed.inRaw,
+            slippagePct: settings.slippagePct,
+          });
+          setQuote({
+            venue: q.venue,
+            inMint: props.mint,
+            inSymbol,
+            inDecimals: outDecimals,
+            inAmountRaw: parsed.inRaw.toString(),
+            outMint: SOL_MINT,
+            outSymbol: "SOL",
+            outDecimals: 9,
+            outAmountRaw: q.solLamports,
+            priceImpactPct: q.priceImpactBps == null ? null : q.priceImpactBps / 100,
+            feesLamports: q.feesLamports,
+            usdValue: solPrice != null ? Number(lamportsToSol(new BN(q.solLamports))) * solPrice : null,
+            notes: q.notes,
+            graduated: q.graduated,
+          });
+          return;
+        } catch (err) {
+          if (!isPumpTokenError(err)) {
+            throw new Error(friendlyOnchainError(err, props.mint));
+          }
+          // falls through to jupiter
+          setPumpSupported(false);
+        }
+      }
+      // Jupiter path (always available)
+      const jupQuote = await jupQuoteFor(parsed.inRaw);
+      const outMint = side === "buy" ? props.mint : SOL_MINT;
+      const outSymbolResolved = side === "buy" ? symbol : "SOL";
+      const outDecimalsResolved = side === "buy" ? outDecimals : 9;
+      const prices = await fetchJupiterUsdPrice([inMint, outMint]);
+      const inUsd = prices[inMint] ?? (inMint === SOL_MINT ? solPrice : null);
+      const usd = inUsd != null
+        ? inUsd * Number(uiToTokensDisplay(amount, inDecimals))
+        : null;
       setQuote({
-        tokensOut: q.tokenAmountRaw,
-        solOut: q.solLamports,
-        fees: q.feesLamports,
-        impact: q.priceImpactBps,
-        venue: q.venue,
-        graduated: q.graduated,
+        venue: "jupiter",
+        inMint,
+        inSymbol,
+        inDecimals,
+        inAmountRaw: parsed.inRaw.toString(),
+        outMint,
+        outSymbol: outSymbolResolved,
+        outDecimals: outDecimalsResolved,
+        outAmountRaw: jupQuote.outAmount,
+        priceImpactPct: jupQuote.priceImpactPct
+          ? Number(jupQuote.priceImpactPct)
+          : null,
+        feesLamports: "0",
+        usdValue: usd,
+        notes: [],
+        graduated: false,
       });
     } catch (err) {
       setQuote(null);
-      const msg = err instanceof Error ? err.message : String(err);
       setErrorInfo(classifyError(friendlyOnchainError(err, props.mint)));
-      void msg;
     } finally {
       setBusy(false);
     }
+  }
+
+  async function jupQuoteFor(inputRaw: BN): Promise<JupiterQuote> {
+    if (side === "buy") {
+      return fetchJupiterQuote({
+        inputMint: inMint,
+        outputMint: props.mint,
+        amountRaw: inputRaw.toString(),
+        slippageBps: Math.round(settings.slippagePct * 100),
+        swapMode: "ExactIn",
+      });
+    }
+    return fetchJupiterQuote({
+      inputMint: props.mint,
+      outputMint: SOL_MINT,
+      amountRaw: inputRaw.toString(),
+      slippageBps: Math.round(settings.slippagePct * 100),
+      swapMode: "ExactIn",
+    });
   }
 
   async function execute() {
@@ -217,59 +520,139 @@ export function QuickTradePanel(props: Props) {
     setErrorInfo(null);
     try {
       const parsed = parsedAmounts();
-      if (side === "buy" && !settings.simulateMode && wallet.publicKey) {
-        const lamports = parsed.solLamports!;
+      // Pre-flight SOL balance (only relevant for SOL input or pump program ATA rent).
+      if (side === "buy" && !settings.simulateMode && wallet.publicKey && inMint === SOL_MINT) {
+        const lamports = parsed.inRaw;
         const bal = await connection.getBalance(wallet.publicKey, "confirmed");
         const bufferLamports = Math.round(MIN_SOL_RESERVED_FOR_FEES * 1e9);
         const need = lamports.toNumber() + bufferLamports;
         if (bal < need) {
           const have = (bal / 1e9).toFixed(4);
           const want = (need / 1e9).toFixed(4);
-          throw new Error(
-            `Insufficient SOL: wallet has ${have} SOL, trade needs ~${want} SOL.`,
-          );
+          throw new Error(`Insufficient SOL: wallet has ${have} SOL, trade needs ~${want} SOL.`);
         }
       }
-      let r;
-      try {
-        r = await simulateAndSend({
-          connection,
-          wallet,
-          mint: props.mint,
-          side,
-          slippagePct: settings.slippagePct,
-          paper: settings.simulateMode,
-          ...parsed,
-        });
-      } catch (inner) {
-        throw new Error(friendlyOnchainError(inner, props.mint));
+      const tryPump = pumpSupported !== false && inMint === SOL_MINT && quote?.venue !== "jupiter";
+      let result: { receipt: { signature: string | null; simulated: boolean; paper: boolean; side: "buy" | "sell"; mint: string; solLamports: string; tokenAmountRaw: string }; quote: { solLamports: string; tokenAmountRaw: string; feesLamports: string; priceImpactBps: number | null; venue: Venue; graduated: boolean } } | null = null;
+      if (tryPump) {
+        try {
+          result = await simulateAndSend({
+            connection,
+            wallet,
+            mint: props.mint,
+            side,
+            slippagePct: settings.slippagePct,
+            paper: settings.simulateMode,
+            ...(side === "buy"
+              ? { solLamports: parsed.inRaw }
+              : { tokenAmountRaw: parsed.inRaw }),
+          });
+        } catch (err) {
+          if (!isPumpTokenError(err)) throw new Error(friendlyOnchainError(err, props.mint));
+          setPumpSupported(false);
+        }
       }
-      setQuote({
-        tokensOut: r.quote.tokenAmountRaw,
-        solOut: r.quote.solLamports,
-        fees: r.quote.feesLamports,
-        impact: r.quote.priceImpactBps,
-        venue: r.quote.venue,
-        graduated: r.quote.graduated,
-      });
+      if (!result) {
+        // Jupiter path
+        if (settings.simulateMode) {
+          // paper fill
+          const q = await jupQuoteFor(parsed.inRaw);
+          const solEquivalentLamports = await computeSolEquivalentLamports(
+            connection,
+            side,
+            inMint,
+            parsed.inRaw,
+            q.outAmount,
+            solPrice,
+          );
+          const effectiveCost = solEquivalentLamports ?? parsed.inRaw.toString();
+          result = {
+            receipt: {
+              signature: null,
+              simulated: true,
+              paper: true,
+              side,
+              mint: props.mint,
+              solLamports: effectiveCost,
+              tokenAmountRaw: side === "buy" ? q.outAmount : parsed.inRaw.toString(),
+            },
+            quote: {
+              solLamports: effectiveCost,
+              tokenAmountRaw: side === "buy" ? q.outAmount : parsed.inRaw.toString(),
+              feesLamports: "0",
+              priceImpactBps: null,
+              venue: "jupiter",
+              graduated: false,
+            },
+          };
+        } else {
+          const q = await jupQuoteFor(parsed.inRaw);
+          const { signature } = await jupiterSimulateAndSend({
+            connection,
+            wallet,
+            quote: q,
+            paper: false,
+          });
+          // For Jupiter buys paid in non-SOL, the "solLamports" cost in the
+          // local position ledger should still be the SOL-equivalent value so
+          // the PnL math (cost → SOL value) is consistent.
+          const solEquivalentLamports = await computeSolEquivalentLamports(
+            connection,
+            side,
+            inMint,
+            parsed.inRaw,
+            q.outAmount,
+            solPrice,
+          );
+          const effectiveCost = solEquivalentLamports ?? parsed.inRaw.toString();
+          result = {
+            receipt: {
+              signature,
+              simulated: true,
+              paper: false,
+              side,
+              mint: props.mint,
+              solLamports: effectiveCost,
+              tokenAmountRaw: side === "buy" ? q.outAmount : parsed.inRaw.toString(),
+            },
+            quote: {
+              solLamports: effectiveCost,
+              tokenAmountRaw: side === "buy" ? q.outAmount : parsed.inRaw.toString(),
+              feesLamports: "0",
+              priceImpactBps: q.priceImpactPct ? Math.round(Number(q.priceImpactPct) * 100) : null,
+              venue: "jupiter",
+              graduated: false,
+            },
+          };
+        }
+      }
+      setQuote((prev) =>
+        prev
+          ? {
+              ...prev,
+              outAmountRaw: result!.quote.tokenAmountRaw,
+              venue: result!.quote.venue,
+            }
+          : prev,
+      );
       upsertPositionFromFill({
         accountId,
         mint: props.mint,
         name: props.name ?? symbol,
         symbol,
-        decimals,
+        decimals: outDecimals,
         side,
-        tokenAmountRaw: new BN(r.receipt.tokenAmountRaw),
-        solLamports: new BN(r.receipt.solLamports),
-        signature: r.receipt.signature,
-        paper: r.receipt.paper,
+        tokenAmountRaw: new BN(result.receipt.tokenAmountRaw),
+        solLamports: new BN(result.receipt.solLamports),
+        signature: result.receipt.signature,
+        paper: result.receipt.paper,
       });
-      if (r.receipt.paper) {
+      if (result.receipt.paper) {
         setReceipt({ note: "Paper fill — no transaction sent. Recorded locally for tracking." });
-      } else if (r.receipt.signature) {
+      } else if (result.receipt.signature) {
         setReceipt({
           note: "Confirmed on-chain.",
-          url: `${SOLSCAN_TX}${r.receipt.signature}`,
+          url: `${SOLSCAN_TX}${result.receipt.signature}`,
         });
       } else {
         setReceipt({ note: "Submitted to the network." });
@@ -283,8 +666,18 @@ export function QuickTradePanel(props: Props) {
     }
   }
 
-  const amountSol = side === "buy" ? Number(amount) : null;
-  const amountUsd = solPrice != null && amountSol != null ? amountSol * solPrice : null;
+  const amountUi = Number(amount);
+  const isValidAmount =
+    Number.isFinite(amountUi) && amountUi > 0;
+  const amountSol = side === "buy" && inMint === SOL_MINT ? Number(amount) : null;
+  const amountUsd =
+    solPrice != null && amountSol != null ? amountSol * solPrice : null;
+  const venueLabel =
+    quote?.venue === "jupiter"
+      ? "Jupiter aggregator"
+      : quote?.venue === "pump-amm"
+        ? "pump-amm"
+        : "pump.fun bonding curve";
 
   return (
     <div className="rounded border border-line bg-ink-800 p-4">
@@ -348,9 +741,9 @@ export function QuickTradePanel(props: Props) {
       </div>
 
       <label className="mb-1 block font-mono text-[11px] uppercase text-mute">
-        {side === "buy" ? "Spend (SOL)" : `Sell amount (${symbol})`}
+        {side === "buy" ? "Spend" : `Sell amount (${symbol})`}
       </label>
-      <div className="mb-3 flex gap-2">
+      <div className="mb-1 flex gap-2">
         <input
           value={amount}
           onChange={(e) => {
@@ -359,10 +752,10 @@ export function QuickTradePanel(props: Props) {
             setErrorInfo(null);
           }}
           inputMode="decimal"
-          className="flex-1 rounded border border-line bg-ink-900 px-3 py-2 font-mono text-sm outline-none focus:border-neon"
+          className="min-w-0 flex-1 rounded border border-line bg-ink-900 px-3 py-2 font-mono text-sm outline-none focus:border-neon"
         />
         {side === "buy" ? (
-          <div className="flex gap-1">
+          <div className="flex shrink-0 gap-1">
             {["0.01", "0.05", "0.1", "0.5"].map((preset) => (
               <button
                 key={preset}
@@ -381,16 +774,61 @@ export function QuickTradePanel(props: Props) {
         ) : null}
       </div>
       {amountUsd != null ? (
-        <p className="-mt-2 mb-2 font-mono text-[11px] text-mute">
+        <p className="-mt-0 mb-2 font-mono text-[11px] text-mute">
           ≈ ${amountUsd.toFixed(2)} USD
         </p>
+      ) : (
+        <div className="mb-2" />
+      )}
+
+      {side === "buy" ? (
+        <label className="mb-3 block">
+          <span className="mb-1 block font-mono text-[11px] uppercase text-mute">
+            Pay with
+          </span>
+          <select
+            value={inMint}
+            onChange={(e) => {
+              setInMint(e.target.value);
+              setQuote(null);
+              setErrorInfo(null);
+              if (e.target.value !== SOL_MINT) {
+                setPumpSupported(false);
+              }
+            }}
+            className="w-full rounded border border-line bg-ink-900 px-3 py-2 font-mono text-sm"
+          >
+            {inputOptions.map((o) => (
+              <option key={o.mint} value={o.mint}>
+                {o.symbol} · {shortenAddress(o.mint, 4, 4)}
+              </option>
+            ))}
+          </select>
+          {inBalance != null ? (
+            <p className="mt-1 font-mono text-[11px] text-mute">
+              Balance:{" "}
+              <span className="text-zinc-200">
+                {inBalance.toLocaleString(undefined, { maximumFractionDigits: 6 })} {inSymbol}
+              </span>
+            </p>
+          ) : null}
+          {inMint !== SOL_MINT ? (
+            <p className="mt-1 font-mono text-[11px] text-warn">
+              Will route through Jupiter. The pump program only accepts SOL.
+            </p>
+          ) : pumpSupported === false ? (
+            <p className="mt-1 font-mono text-[11px] text-warn">
+              This token is not on pump.fun. Buy will route through Jupiter.
+            </p>
+          ) : null}
+        </label>
       ) : null}
 
       <div className="mb-3 flex gap-2">
         <button
           type="button"
           onClick={() => void runQuote()}
-          disabled={busy}
+          disabled={busy || !isValidAmount}
           className="flex-1 rounded border border-line py-2 font-mono text-xs hover:border-neon disabled:opacity-40"
         >
           {busy ? "Quoting…" : "Get quote"}
@@ -409,31 +847,39 @@ export function QuickTradePanel(props: Props) {
 
       {quote ? (
         <dl className="grid grid-cols-2 gap-x-3 gap-y-1 rounded border border-line bg-ink-900 p-2 font-mono text-xs">
-          <dt className="text-mute">{side === "buy" ? "You receive" : "You receive"}</dt>
+          <dt className="text-mute">You receive</dt>
           <dd>
             {side === "buy"
-              ? `${tokensToUi(new BN(quote.tokensOut), decimals)} ${symbol}`
-              : `${lamportsToSol(new BN(quote.solOut))} SOL`}
-            {solPrice != null && side === "buy"
-              ? ` (≈ $${(lamportsToSol(new BN(quote.solOut), 9).includes(".")
-                  ? Number(lamportsToSol(new BN(quote.solOut), 9)) * solPrice
-                  : 0
-                ).toFixed(2)})`
-              : null}
+              ? `${tokensToUi(new BN(quote.outAmountRaw), quote.outDecimals)} ${quote.outSymbol}`
+              : `${lamportsToSol(new BN(quote.outAmountRaw))} SOL`}
+            {quote.usdValue != null ? (
+              <span className="block text-[11px] text-mute">≈ ${quote.usdValue.toFixed(2)}</span>
+            ) : null}
           </dd>
           <dt className="text-mute">Venue</dt>
-          <dd>{quote.venue}{quote.graduated ? " · graduated" : " · bonding curve"}</dd>
-          <dt className="text-mute">Fees</dt>
-          <dd>{lamportsToSol(new BN(quote.fees))} SOL</dd>
+          <dd>
+            {venueLabel}
+            {quote.graduated ? " · graduated" : ""}
+          </dd>
+          <dt className="text-mute">Pay with</dt>
+          <dd>
+            {quote.inSymbol} · {shortenAddress(quote.inMint, 4, 4)}
+          </dd>
           <dt className="text-mute">Impact</dt>
-          <dd>{quote.impact == null ? "—" : `${(quote.impact / 100).toFixed(2)}%`}</dd>
+          <dd>
+            {quote.priceImpactPct == null
+              ? "—"
+              : `${quote.priceImpactPct.toFixed(2)}%`}
+          </dd>
           <dt className="text-mute">Slippage</dt>
           <dd>{settings.slippagePct}%</dd>
         </dl>
       ) : (
         <p className="rounded border border-dashed border-line bg-ink-900 p-3 text-center font-mono text-xs text-mute">
           {side === "buy"
-            ? `Pick how much SOL to spend. Min ${MIN_BUY_SOL} SOL.`
+            ? inMint === SOL_MINT && pumpSupported !== false
+              ? `Pick how much SOL to spend. Min ${MIN_BUY_SOL} SOL.`
+              : "Pick how much to spend. Routes through Jupiter."
             : "Pick how many tokens to sell."}
         </p>
       )}
@@ -494,11 +940,17 @@ export function QuickTradePanel(props: Props) {
                 : `Live mainnet trade. Wallet must sign in Phantom. This app never asks for a private key.`}
             </p>
             {quote ? (
-              <p>
-                {side === "buy"
-                  ? `Spend ${amount} SOL → ~${tokensToUi(new BN(quote.tokensOut), decimals)} ${symbol}`
-                  : `Sell ${tokensToUi(new BN(quote.tokensOut), decimals)} ${symbol} → ~${lamportsToSol(new BN(quote.solOut))} SOL`}
-              </p>
+              <>
+                <p>
+                  {side === "buy"
+                    ? `Spend ${amount} ${quote.inSymbol} → ~${tokensToUi(new BN(quote.outAmountRaw), quote.outDecimals)} ${quote.outSymbol}`
+                    : `Sell ${tokensToUi(new BN(quote.inAmountRaw), quote.inDecimals)} ${quote.inSymbol} → ~${lamportsToSol(new BN(quote.outAmountRaw))} SOL`}
+                </p>
+                <p>Via {venueLabel} · slippage {settings.slippagePct}%</p>
+                {quote.usdValue != null ? (
+                  <p>≈ ${quote.usdValue.toFixed(2)}</p>
+                ) : null}
+              </>
             ) : null}
           </div>
         }
@@ -507,5 +959,57 @@ export function QuickTradePanel(props: Props) {
   );
 }
 
+function uiToTokensDisplay(input: string, decimals: number): string {
+  try {
+    const raw = uiToTokens(input, decimals);
+    return tokensToUi(raw, decimals);
+  } catch {
+    return "0";
+  }
+}
+
 // Backwards-compat re-export
 export { QuickTradePanel as TradePanel };
+
+/**
+ * Convert the input or output amount of a Jupiter quote into a SOL-denominated
+ * lamports value, so the local position ledger stays in SOL terms.
+ *
+ *  - For SOL input/output: the raw amount is already in lamports.
+ *  - For non-SOL: we use the Jupiter USD price feed for that mint and divide
+ *    by the current SOL price. This is good enough for tracking PnL on the
+ *    local positions page; for the actual on-chain fill the user already paid
+ *    in whatever token they chose.
+ */
+async function computeSolEquivalentLamports(
+  connection: Connection,
+  side: "buy" | "sell",
+  inMint: string,
+  inRaw: BN,
+  outRaw: string,
+  solPriceUsd: number | null,
+): Promise<string | null> {
+  if (inMint === SOL_MINT) return inRaw.toString();
+  if (side === "sell" && outRaw) {
+    // Selling any token → receiving SOL. The output from Jupiter is in
+    // SOL lamports already.
+    return outRaw;
+  }
+  // side === "buy" with non-SOL input: USD value of input / SOL USD price.
+  const inDecimals = await fetchMintDecimals(connection, inMint);
+  const uiAmount = Number(tokensToUi(inRaw, inDecimals));
+  if (!Number.isFinite(uiAmount) || uiAmount <= 0) return null;
+  const prices = await fetchJupiterUsdPrice([inMint]);
+  const usdPrice = prices[inMint];
+  if (usdPrice == null || !Number.isFinite(usdPrice) || usdPrice <= 0) return null;
+  let usd: number;
+  if (inMint === "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" || inMint === "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB") {
+    usd = uiAmount; // stablecoin
+  } else {
+    usd = uiAmount * usdPrice;
+  }
+  const solUsd = solPriceUsd;
+  if (solUsd == null || !Number.isFinite(solUsd) || solUsd <= 0) return null;
+  const solAmount = usd / solUsd;
+  return new BN(Math.max(0, Math.floor(solAmount * 1e9)).toString()).toString();
+}
