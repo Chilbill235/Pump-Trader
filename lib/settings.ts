@@ -10,6 +10,7 @@ import {
   DEFAULT_SLIPPAGE_PCT,
   SETTINGS_KEY,
 } from "./constants";
+import { safeReadScoped, safeWriteScoped } from "./accounts";
 
 export type AppSettings = {
   rpcUrl: string;
@@ -64,12 +65,10 @@ function numInRange(
   return value;
 }
 
-export function loadSettings(): AppSettings {
-  if (typeof window === "undefined") return DEFAULT_SETTINGS;
+export function loadSettings(accountId: string | null): AppSettings {
+  if (typeof window === "undefined" || !accountId) return DEFAULT_SETTINGS;
   try {
-    const raw = window.localStorage.getItem(SETTINGS_KEY);
-    if (!raw) return DEFAULT_SETTINGS;
-    const parsed = JSON.parse(raw) as Partial<AppSettings>;
+    const parsed = safeReadScoped<Partial<AppSettings>>(accountId, SETTINGS_KEY, {});
     const slippage = numInRange(parsed.slippagePct, DEFAULT_SLIPPAGE_PCT, 0.1, 50);
     return {
       rpcUrl:
@@ -134,6 +133,7 @@ export function loadSettings(): AppSettings {
   }
 }
 
-export function saveSettings(next: AppSettings): void {
-  window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+export function saveSettings(accountId: string | null, next: AppSettings): void {
+  if (typeof window === "undefined" || !accountId) return;
+  safeWriteScoped(accountId, SETTINGS_KEY, next);
 }

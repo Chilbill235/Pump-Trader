@@ -17,6 +17,7 @@ import {
 import { CoinImage } from "./CoinImage";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { useSettings } from "./SettingsProvider";
+import { useActiveAccountId } from "./AccountsProvider";
 
 type Props = {
   mint: string;
@@ -146,6 +147,7 @@ export function QuickTradePanel(props: Props) {
   const { connection } = useConnection();
   const wallet = useWallet();
   const { settings } = useSettings();
+  const accountId = useActiveAccountId();
   const decimals = TOKEN_DECIMALS;
   const symbol = props.symbol ?? "???";
 
@@ -251,6 +253,7 @@ export function QuickTradePanel(props: Props) {
         graduated: r.quote.graduated,
       });
       upsertPositionFromFill({
+        accountId,
         mint: props.mint,
         name: props.name ?? symbol,
         symbol,

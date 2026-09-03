@@ -3,6 +3,7 @@ import {
   PIPELINE_DAILY_KEY,
   PIPELINE_LOG_KEY,
 } from "./constants";
+import { safeReadScoped, safeWriteScoped } from "./accounts";
 import type { PipelineCandidate, PipelineLogEntry, PipelineStage } from "./types";
 
 const LOG_CAP = 400;
@@ -27,33 +28,22 @@ function nyDate(now = Date.now()): string {
   }
 }
 
-function readJson<T>(key: string, fallback: T): T {
-  if (typeof window === "undefined") return fallback;
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return fallback;
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
-
-function writeJson(key: string, value: unknown): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(key, JSON.stringify(value));
-}
-
-export function loadPipelineLog(): PipelineLogEntry[] {
-  const parsed = readJson<PipelineLogEntry[]>(PIPELINE_LOG_KEY, []);
+export function loadPipelineLog(accountId: string | null): PipelineLogEntry[] {
+  const parsed = safeReadScoped<PipelineLogEntry[]>(accountId, PIPELINE_LOG_KEY, []);
   return Array.isArray(parsed) ? parsed : [];
 }
 
-export function savePipelineLog(entries: PipelineLogEntry[]): void {
-  writeJson(PIPELINE_LOG_KEY, entries.slice(0, LOG_CAP));
+export function savePipelineLog(accountId: string | null, entries: PipelineLogEntry[]): void {
+  if (!accountId) return;
+  safeWriteScoped(accountId, PIPELINE_LOG_KEY, entries.slice(0, LOG_CAP));
 }
 
-export function appendPipelineLog(entry: PipelineLogEntry): PipelineLogEntry[] {
-  const prev = loadPipelineLog();
+export function appendPipelineLog(
+  accountId: string | null,
+  entry: PipelineLogEntry,
+): PipelineLogEntry[] {
+  if (!accountId) return [];
+  const prev = loadPipelineLog(accountId);
   const last = prev.find((e) => e.mint === entry.mint);
   if (
     last &&
@@ -66,7 +56,7 @@ export function appendPipelineLog(entry: PipelineLogEntry): PipelineLogEntry[] {
     return prev;
   }
   const next = [entry, ...prev].slice(0, LOG_CAP);
-  savePipelineLog(next);
+  savePipelineLog(accountId, next);
   return next;
 }
 
@@ -78,34 +68,40 @@ export function lastLogByMint(log: PipelineLogEntry[]): Map<string, PipelineLogE
   return map;
 }
 
-export function loadCandidates(): PipelineCandidate[] {
-  const parsed = readJson<PipelineCandidate[]>(PIPELINE_CANDIDATES_KEY, []);
+export function loadCandidates(accountId: string | null): PipelineCandidate[] {
+  const parsed = safeReadScoped<PipelineCandidate[]>(accountId, PIPELINE_CANDIDATES_KEY, []);
   return Array.isArray(parsed) ? parsed : [];
 }
 
-export function saveCandidates(list: PipelineCandidate[]): void {
-  writeJson(PIPELINE_CANDIDATES_KEY, list.slice(0, CANDIDATE_CAP));
+export function saveCandidates(accountId: string | null, list: PipelineCandidate[]): void {
+  if (!accountId) return;
+  safeWriteScoped(accountId, PIPELINE_CANDIDATES_KEY, list.slice(0, CANDIDATE_CAP));
 }
 
-export function upsertCandidate(candidate: PipelineCandidate): PipelineCandidate[] {
-  const list = loadCandidates().filter((c) => c.mint !== candidate.mint);
+export function upsertCandidate(
+  accountId: string | null,
+  candidate: PipelineCandidate,
+): PipelineCandidate[] {
+  if (!accountId) return [];
+  const list = loadCandidates(accountId).filter((c) => c.mint !== candidate.mint);
   const next = [candidate, ...list].slice(0, CANDIDATE_CAP);
-  saveCandidates(next);
+  saveCandidates(accountId, next);
   return next;
 }
 
-export function removeCandidate(mint: string): PipelineCandidate[] {
-  const next = loadCandidates().filter((c) => c.mint !== mint);
-  saveCandidates(next);
+export function removeCandidate(accountId: string | null, mint: string): PipelineCandidate[] {
+  if (!accountId) return [];
+  const next = loadCandidates(accountId).filter((c) => c.mint !== mint);
+  saveCandidates(accountId, next);
   return next;
 }
 
-export function loadDailyRisk(now = Date.now()): DailyRiskState {
+export function loadDailyRisk(accountId: string | null, now = Date.now()): DailyRiskState {
   const today = nyDate(now);
-  const parsed = readJson<DailyRiskState | null>(PIPELINE_DAILY_KEY, null);
+  const parsed = safeReadScoped<DailyRiskState | null>(accountId, PIPELINE_DAILY_KEY, null);
   if (!parsed || parsed.date !== today) {
     const fresh: DailyRiskState = { date: today, realizedLossSol: 0, spentSol: 0 };
-    writeJson(PIPELINE_DAILY_KEY, fresh);
+    safeWriteScoped(accountId, PIPELINE_DAILY_KEY, fresh);
     return fresh;
   }
   return {
@@ -115,28 +111,38 @@ export function loadDailyRisk(now = Date.now()): DailyRiskState {
   };
 }
 
-export function recordPipelineSpend(sol: number, now = Date.now()): DailyRiskState {
-  const cur = loadDailyRisk(now);
+export function recordPipelineSpend(
+  accountId: string | null,
+  sol: number,
+  now = Date.now(),
+): DailyRiskState {
+  if (!accountId) return { date: nyDate(now), realizedLossSol: 0, spentSol: 0 };
+  const cur = loadDailyRisk(accountId, now);
   const next: DailyRiskState = {
     ...cur,
     spentSol: cur.spentSol + Math.max(0, sol),
   };
-  writeJson(PIPELINE_DAILY_KEY, next);
+  safeWriteScoped(accountId, PIPELINE_DAILY_KEY, next);
   return next;
 }
 
-export function recordPipelineLoss(sol: number, now = Date.now()): DailyRiskState {
-  const cur = loadDailyRisk(now);
+export function recordPipelineLoss(
+  accountId: string | null,
+  sol: number,
+  now = Date.now(),
+): DailyRiskState {
+  if (!accountId) return { date: nyDate(now), realizedLossSol: 0, spentSol: 0 };
+  const cur = loadDailyRisk(accountId, now);
   const next: DailyRiskState = {
     ...cur,
     realizedLossSol: cur.realizedLossSol + Math.max(0, sol),
   };
-  writeJson(PIPELINE_DAILY_KEY, next);
+  safeWriteScoped(accountId, PIPELINE_DAILY_KEY, next);
   return next;
 }
 
-export function dailyAtRiskSol(now = Date.now()): number {
-  const d = loadDailyRisk(now);
+export function dailyAtRiskSol(accountId: string | null, now = Date.now()): number {
+  const d = loadDailyRisk(accountId, now);
   return d.realizedLossSol + d.spentSol;
 }
 
@@ -150,11 +156,9 @@ const STICKY: PipelineStage[] = [
   "rejected",
 ];
 
-/** Age-filter skips should be retried; later-stage decisions stick. */
 export function isStickyStage(stage: PipelineStage, reason: string): boolean {
   if (stage === "filter" && /age .+m ≤/.test(reason)) return false;
   if (stage === "filter" && reason.includes("empty/thin curve") && reason.includes("estimated")) {
-    // curve may fill — retry
     return false;
   }
   if (stage === "queued" || stage === "approved" || stage === "rejected") return true;

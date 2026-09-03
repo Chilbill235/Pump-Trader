@@ -8,6 +8,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { CoinImage } from "./CoinImage";
 import { CopyButton } from "./CopyButton";
 import { useSettings } from "./SettingsProvider";
+import { useActiveAccountId } from "./AccountsProvider";
 import { SOLSCAN_TX, TOKEN_DECIMALS } from "@/lib/constants";
 import { appendBotLog } from "@/lib/bot-log";
 import { evaluateBankroll, loadBankrollConfig } from "@/lib/bankroll";
@@ -37,6 +38,7 @@ import {
   evaluateLaunchBatch,
 } from "@/lib/pipeline";
 import { loadPositions, upsertPositionFromFill } from "@/lib/positions";
+import { loadClosedTrades } from "@/lib/stats";
 import { recordMomentumSample, type CoinMomentum } from "@/lib/momentum";
 import { DUMMY_USER, quoteTrade } from "@/lib/sdk";
 import { simulateAndSend } from "@/lib/trade";
@@ -51,9 +53,10 @@ function formatAge(minutes: number): string {
   return `${(minutes / 60).toFixed(1)}h`;
 }
 
-function openCostByMint(): Record<string, number> {
+function openCostByMint(accountId: string | null): Record<string, number> {
+  if (!accountId) return {};
   const out: Record<string, number> = {};
-  for (const p of loadPositions()) {
+  for (const p of loadPositions(accountId)) {
     out[p.mint] = Number(p.costLamports) / 1e9;
   }
   return out;
@@ -63,6 +66,7 @@ export function WatchView() {
   const { connection } = useConnection();
   const wallet = useWallet();
   const { settings, hydrated } = useSettings();
+  const accountId = useActiveAccountId();
   const [coins, setCoins] = useState<PumpCoin[]>([]);
   const [source, setSource] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -79,28 +83,33 @@ export function WatchView() {
   const seenRef = useRef<Map<string, PipelineLogEntry>>(new Map());
 
   useEffect(() => {
-    const existing = loadPipelineLog();
+    if (!accountId) {
+      setLog([]);
+      setCandidates([]);
+      return;
+    }
+    const existing = loadPipelineLog(accountId);
     setLog(existing);
     seenRef.current = lastLogByMint(existing);
-    setCandidates(loadCandidates());
-  }, []);
+    setCandidates(loadCandidates(accountId));
+  }, [accountId]);
 
   const runPipeline = useCallback(
     (list: PumpCoin[]) => {
-      if (!settings.pipelineEnabled) return;
+      if (!settings.pipelineEnabled || !accountId) return;
       const now = Date.now();
-      const log = loadPipelineLog();
+      const log = loadPipelineLog(accountId);
       seenRef.current = lastLogByMint(log);
-      const pending = loadCandidates();
+      const pending = loadCandidates(accountId);
       const pendingSol = pending.reduce((s, c) => s + c.sizeSol, 0);
-      const positions = loadPositions();
+      const positions = loadPositions(accountId);
       const freshPopping = recordMomentumSample(list);
       setPopping(freshPopping);
       const momentumByMint: Record<string, number> = {};
       for (const m of freshPopping) momentumByMint[m.mint] = m.score;
       const decisions = evaluateLaunchBatch(list, settings, {
-        dailyAtRiskSol: dailyAtRiskSol(now) + pendingSol,
-        openCostByMint: openCostByMint(),
+        dailyAtRiskSol: dailyAtRiskSol(accountId, now) + pendingSol,
+        openCostByMint: openCostByMint(accountId),
         openPositionsCount: positions.length,
         now,
         momentumByMint,
@@ -130,15 +139,15 @@ export function WatchView() {
           prev.reason !== entry.reason ||
           entry.stage === "queued";
         if (shouldWrite) {
-          nextLog = appendPipelineLog(entry);
+          nextLog = appendPipelineLog(accountId, entry);
           seenRef.current.set(coin.mint, entry);
         }
         if (decision.action === "queue") {
           const cand = decisionToCandidate(coin, decision, now);
           if (cand) {
-            nextCandidates = upsertCandidate(cand);
+            nextCandidates = upsertCandidate(accountId, cand);
             queuedMints.add(cand.mint);
-            appendBotLog({
+            appendBotLog(accountId, {
               kind: "candidate_queued",
               mint: coin.mint,
               symbol: coin.symbol,
@@ -158,7 +167,7 @@ export function WatchView() {
                     ? "daily_limit_skip"
                     : null;
           if (skipKind) {
-            appendBotLog({
+            appendBotLog(accountId, {
               kind: skipKind,
               mint: coin.mint,
               symbol: coin.symbol,
@@ -167,14 +176,14 @@ export function WatchView() {
           }
         }
       });
-      saveCandidates(nextCandidates);
+      saveCandidates(accountId, nextCandidates);
       setLog(nextLog);
       setCandidates(nextCandidates);
     },
-    [settings],
+    [settings, accountId],
   );
 
-  const poll = useCallback(async () => {
+  const pollLaunches = useCallback(async () => {
     try {
       const res = await fetch("/api/coins?sort=created_timestamp", { cache: "no-store" });
       const json = (await res.json()) as {
@@ -203,11 +212,11 @@ export function WatchView() {
   }, [runPipeline]);
 
   useEffect(() => {
-    if (!hydrated) return;
-    void poll();
-    const id = setInterval(() => void poll(), POLL_MS);
+    if (!hydrated || !accountId) return;
+    void pollLaunches();
+    const id = setInterval(() => void pollLaunches(), POLL_MS);
     return () => clearInterval(id);
-  }, [hydrated, poll]);
+  }, [hydrated, accountId, pollLaunches]);
 
   const skipped = useMemo(
     () =>
@@ -223,6 +232,7 @@ export function WatchView() {
   );
 
   async function paperOrLiveBuy(candidate: PipelineCandidate, paper: boolean) {
+    if (!accountId) return;
     setBusyMint(candidate.mint);
     setActionError(null);
     setReceiptNote(null);
@@ -242,31 +252,25 @@ export function WatchView() {
       if (solLamports.lten(0)) throw new Error("Buy size is 0.");
 
       // Bankroll protection: stop the bot if equity / drawdown / session loss are breached.
-      const cfg = loadBankrollConfig();
+      const cfg = loadBankrollConfig(accountId);
       if (cfg.enabled && settings.autoTrade) {
         const bankrollSol = wallet.publicKey
           ? (await connection.getBalance(wallet.publicKey, "confirmed")) / 1e9
           : 0;
-        const closedTrades = (() => {
-          try {
-            const raw = window.localStorage.getItem("pump-trader:closed-trades:v1");
-            return raw ? (JSON.parse(raw) as { pnlSol: number }[]) : [];
-          } catch {
-            return [];
-          }
-        })();
+        const closedTrades = loadClosedTrades(accountId);
         const realizedLoss = Math.max(
           0,
           closedTrades.filter((t) => t.pnlSol < 0).reduce((s, t) => s + t.pnlSol, 0) * -1,
         );
         const result = evaluateBankroll({
+          accountId,
           bankrollSol,
           positionsValueSol: 0,
           realizedLossSessionSol: realizedLoss,
           cfg,
         });
         if (result.killSwitch && result.killSwitchReason) {
-          appendBotLog({ kind: "error", message: `KILL SWITCH: ${result.killSwitchReason}` });
+          appendBotLog(accountId, { kind: "error", message: `KILL SWITCH: ${result.killSwitchReason}` });
           throw new Error(result.killSwitchReason);
         }
       }
@@ -296,6 +300,7 @@ export function WatchView() {
             preQuote,
           });
           upsertPositionFromFill({
+            accountId,
             mint: candidate.mint,
             name: candidate.name,
             symbol: candidate.symbol,
@@ -308,6 +313,7 @@ export function WatchView() {
           });
         } else {
           upsertPositionFromFill({
+            accountId,
             mint: candidate.mint,
             name: candidate.name,
             symbol: candidate.symbol,
@@ -319,7 +325,7 @@ export function WatchView() {
             paper: true,
           });
         }
-        recordPipelineSpend(candidate.sizeSol);
+        recordPipelineSpend(accountId, candidate.sizeSol);
         const entry: PipelineLogEntry = {
           mint: candidate.mint,
           name: candidate.name,
@@ -329,16 +335,16 @@ export function WatchView() {
           scores: candidate.scores,
           timestamp: Date.now(),
         };
-        appendBotLog({
+        appendBotLog(accountId, {
           kind: "buy_paper",
           mint: candidate.mint,
           symbol: candidate.symbol,
           sizeSol: candidate.sizeSol,
           message: `paper fill ${candidate.sizeSol} SOL (simulate mode)`,
         });
-        setLog(appendPipelineLog(entry));
+        setLog(appendPipelineLog(accountId, entry));
         seenRef.current.set(candidate.mint, entry);
-        setCandidates(removeCandidate(candidate.mint));
+        setCandidates(removeCandidate(accountId, candidate.mint));
         setReceiptNote(`Paper fill recorded for ${candidate.symbol}. No transaction was sent.`);
         return;
       }
@@ -367,6 +373,7 @@ export function WatchView() {
         preQuote,
       });
       upsertPositionFromFill({
+        accountId,
         mint: candidate.mint,
         name: candidate.name,
         symbol: candidate.symbol,
@@ -377,7 +384,7 @@ export function WatchView() {
         signature: receipt.signature,
         paper: false,
       });
-      recordPipelineSpend(candidate.sizeSol);
+      recordPipelineSpend(accountId, candidate.sizeSol);
       const entry: PipelineLogEntry = {
         mint: candidate.mint,
         name: candidate.name,
@@ -389,7 +396,7 @@ export function WatchView() {
         scores: candidate.scores,
         timestamp: Date.now(),
       };
-      appendBotLog({
+      appendBotLog(accountId, {
         kind: receipt.signature ? "buy_live" : "buy_paper",
         mint: candidate.mint,
         symbol: candidate.symbol,
@@ -399,9 +406,9 @@ export function WatchView() {
           ? `live buy ${candidate.sizeSol} SOL`
           : `paper buy ${candidate.sizeSol} SOL`,
       });
-      setLog(appendPipelineLog(entry));
+      setLog(appendPipelineLog(accountId, entry));
       seenRef.current.set(candidate.mint, entry);
-      setCandidates(removeCandidate(candidate.mint));
+      setCandidates(removeCandidate(accountId, candidate.mint));
       setReceiptNote(
         receipt.signature
           ? `Confirmed on-chain. ${SOLSCAN_TX}${receipt.signature}`
@@ -416,6 +423,7 @@ export function WatchView() {
   }
 
   function reject(candidate: PipelineCandidate) {
+    if (!accountId) return;
     const entry: PipelineLogEntry = {
       mint: candidate.mint,
       name: candidate.name,
@@ -425,15 +433,15 @@ export function WatchView() {
       scores: candidate.scores,
       timestamp: Date.now(),
     };
-    appendBotLog({
+    appendBotLog(accountId, {
       kind: "candidate_rejected",
       mint: candidate.mint,
       symbol: candidate.symbol,
       message: "human rejected",
     });
-    setLog(appendPipelineLog(entry));
+    setLog(appendPipelineLog(accountId, entry));
     seenRef.current.set(candidate.mint, entry);
-    setCandidates(removeCandidate(candidate.mint));
+    setCandidates(removeCandidate(accountId, candidate.mint));
   }
 
   function onApprove(candidate: PipelineCandidate) {

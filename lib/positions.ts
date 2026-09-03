@@ -1,24 +1,20 @@
 import BN from "bn.js";
 import { POSITIONS_KEY, TOKEN_DECIMALS } from "./constants";
+import { safeReadScoped, safeWriteScoped } from "./accounts";
 import type { Position, TradeSide } from "./types";
 
-export function loadPositions(): Position[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(POSITIONS_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as Position[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+export function loadPositions(accountId: string | null): Position[] {
+  if (typeof window === "undefined" || !accountId) return [];
+  return safeReadScoped<Position[]>(accountId, POSITIONS_KEY, []);
 }
 
-export function savePositions(positions: Position[]): void {
-  window.localStorage.setItem(POSITIONS_KEY, JSON.stringify(positions));
+export function savePositions(accountId: string | null, positions: Position[]): void {
+  if (typeof window === "undefined" || !accountId) return;
+  safeWriteScoped(accountId, POSITIONS_KEY, positions);
 }
 
 export function upsertPositionFromFill(args: {
+  accountId: string | null;
   mint: string;
   name: string;
   symbol: string;
@@ -29,7 +25,7 @@ export function upsertPositionFromFill(args: {
   signature: string | null;
   paper: boolean;
 }): Position[] {
-  const list = loadPositions();
+  const list = loadPositions(args.accountId);
   const decimals = args.decimals ?? TOKEN_DECIMALS;
   if (args.tokenAmountRaw.ltn(0) || args.solLamports.ltn(0)) {
     throw new Error(
@@ -80,24 +76,25 @@ export function upsertPositionFromFill(args: {
   if (idx >= 0) out[idx] = next;
   else out.unshift(next);
   const filtered = out.filter((p) => p.tokenAmountRaw !== "0");
-  savePositions(filtered);
+  savePositions(args.accountId, filtered);
   return filtered;
 }
 
 export function updatePositionMeta(
+  accountId: string | null,
   mint: string,
   patch: Partial<Pick<Position, "takeProfitPct" | "stopLossPct" | "name" | "symbol">>,
 ): Position[] {
-  const list = loadPositions().map((p) =>
+  const list = loadPositions(accountId).map((p) =>
     p.mint === mint ? { ...p, ...patch, updatedAt: Date.now() } : p,
   );
-  savePositions(list);
+  savePositions(accountId, list);
   return list;
 }
 
-export function removePosition(mint: string): Position[] {
-  const list = loadPositions().filter((p) => p.mint !== mint);
-  savePositions(list);
+export function removePosition(accountId: string | null, mint: string): Position[] {
+  const list = loadPositions(accountId).filter((p) => p.mint !== mint);
+  savePositions(accountId, list);
   return list;
 }
 

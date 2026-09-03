@@ -18,6 +18,7 @@ import type { Position } from "@/lib/types";
 import { CoinImage } from "./CoinImage";
 import { CopyButton } from "./CopyButton";
 import { useSettings } from "./SettingsProvider";
+import { useActiveAccountId } from "./AccountsProvider";
 
 type Row = Position & { valueLamports: string | null; err?: string };
 
@@ -36,6 +37,7 @@ export function PositionsView() {
   const wallet = useWallet();
   const { publicKey, connected } = wallet;
   const { settings } = useSettings();
+  const accountId = useActiveAccountId();
   const [rows, setRows] = useState<Row[]>([]);
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [holdingsErr, setHoldingsErr] = useState<string | null>(null);
@@ -44,7 +46,11 @@ export function PositionsView() {
   const [solErr, setSolErr] = useState<string | null>(null);
 
   const refreshLocal = useCallback(async () => {
-    const list = loadPositions();
+    if (!accountId) {
+      setRows([]);
+      return;
+    }
+    const list = loadPositions(accountId);
     const valued = await Promise.all(
       list.map(async (p) => {
         try {
@@ -67,7 +73,7 @@ export function PositionsView() {
       }),
     );
     setRows(valued);
-  }, [connection, publicKey, settings.slippagePct]);
+  }, [connection, publicKey, settings.slippagePct, accountId]);
 
   const refreshWallet = useCallback(async () => {
     if (!publicKey) {
@@ -88,7 +94,6 @@ export function PositionsView() {
           return null;
         }
       });
-      // skip closed SOL pool mints: filter to spl-token & non-zero
       const eligible = tokens.filter((t) => t.mint !== "So11111111111111111111111111111111111111112");
       const valued = await Promise.all(
         eligible.map(async (t) => {
@@ -180,7 +185,8 @@ export function PositionsView() {
       <div>
         <h1 className="font-mono text-lg tracking-wide">Positions</h1>
         <p className="text-xs text-mute">
-          Your on-wallet SPL holdings and the tokens this app has traded for you.
+          Your on-wallet SPL holdings and the tokens this account has traded. Other accounts on this
+          device are isolated.
         </p>
       </div>
       <div className="rounded border border-line bg-ink-800 p-3 font-mono text-sm">
@@ -193,14 +199,14 @@ export function PositionsView() {
 
       {!connected ? (
         <div className="rounded border border-line bg-ink-800 p-8 text-center text-sm text-mute">
-          Connect your Phantom wallet (top-right) to load your positions and on-wallet holdings.
+          Connect your wallet to load your positions and on-wallet holdings.
         </div>
       ) : (
         <>
           <section className="rounded border border-line bg-ink-800">
             <header className="flex items-center justify-between border-b border-line px-3 py-2">
               <h2 className="font-mono text-xs uppercase tracking-wide text-mute">
-                Wallet holdings {holdingsLoading ? "· loading…" : `· ${holdings.length}`}
+                Wallet holdings {holdingsLoading ? "· loading?" : `· ${holdings.length}`}
               </h2>
               <button
                 type="button"
@@ -227,38 +233,60 @@ export function PositionsView() {
 
           <section>
             <h2 className="mb-2 font-mono text-xs uppercase tracking-wide text-mute">
-              Local positions (this app) · {rows.length}
+              Local positions (this account) · {rows.length}
             </h2>
             {rows.length === 0 ? (
               <div className="rounded border border-line bg-ink-800 p-8 text-center text-sm text-mute">
                 No positions yet. Paper-trade a coin to see it here.
               </div>
             ) : (
-              <div className="overflow-x-auto rounded border border-line">
-                <table className="w-full min-w-[980px] text-left text-sm">
-                  <thead className="bg-ink-800 font-mono text-[11px] uppercase text-mute">
-                    <tr>
-                      <th className="px-3 py-2">Coin</th>
-                      <th className="px-3 py-2">Amount</th>
-                      <th className="px-3 py-2">Cost</th>
-                      <th className="px-3 py-2">Value</th>
-                      <th className="px-3 py-2">PnL</th>
-                      <th className="px-3 py-2">TP %</th>
-                      <th className="px-3 py-2">SL %</th>
-                      <th className="px-3 py-2"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((r) => (
-                      <PositionRow
-                        key={r.mint}
-                        position={r}
-                        onUpdate={() => void refreshLocal()}
-                      />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <>
+                {/* Mobile card layout */}
+                <div className="space-y-2 sm:hidden">
+                  {rows.map((r) => (
+                    <PositionCard
+                      key={r.mint}
+                      position={r}
+                      onUpdate={() => void refreshLocal()}
+                      onRemove={() => {
+                        removePosition(accountId, r.mint);
+                        void refreshLocal();
+                      }}
+                      onSaveMeta={(patch) => {
+                        updatePositionMeta(accountId, r.mint, patch);
+                        void refreshLocal();
+                      }}
+                    />
+                  ))}
+                </div>
+                {/* Desktop table */}
+                <div className="hidden overflow-x-auto rounded border border-line sm:block">
+                  <table className="w-full min-w-[980px] text-left text-sm">
+                    <thead className="bg-ink-800 font-mono text-[11px] uppercase text-mute">
+                      <tr>
+                        <th className="px-3 py-2">Coin</th>
+                        <th className="px-3 py-2">Amount</th>
+                        <th className="px-3 py-2">Cost</th>
+                        <th className="px-3 py-2">Value</th>
+                        <th className="px-3 py-2">PnL</th>
+                        <th className="px-3 py-2">TP %</th>
+                        <th className="px-3 py-2">SL %</th>
+                        <th className="px-3 py-2"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((r) => (
+                        <PositionRow
+                          key={r.mint}
+                          position={r}
+                          onUpdate={() => void refreshLocal()}
+                          accountId={accountId}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </section>
         </>
@@ -303,12 +331,78 @@ function HoldingRow({ holding }: { holding: Holding }) {
   );
 }
 
+function PositionCard(props: {
+  position: Row;
+  onUpdate: () => void;
+  onRemove: () => void;
+  onSaveMeta: (patch: { takeProfitPct?: number | null; stopLossPct?: number | null }) => void;
+}) {
+  const [tp, setTP] = useState<string>(props.position.takeProfitPct == null ? "" : String(props.position.takeProfitPct));
+  const [sl, setSL] = useState<string>(props.position.stopLossPct == null ? "" : String(props.position.stopLossPct));
+  const cost = new BN(props.position.costLamports);
+  const value = props.position.valueLamports ? new BN(props.position.valueLamports) : null;
+  const pnl = value ? pnlPct(cost, value) : null;
+  return (
+    <article className="rounded border border-line bg-ink-800 p-3">
+      <div className="flex items-start justify-between gap-2">
+        <Link href={`/coin/${props.position.mint}`} className="min-w-0">
+          <p className="truncate font-medium">{props.position.name}</p>
+          <p className="font-mono text-[11px] text-mute">{props.position.symbol} · {props.position.paper ? "paper" : "live"}</p>
+        </Link>
+        <div className="text-right font-mono text-xs">
+          <p>{value ? `${lamportsToSol(value)} SOL` : "…"}</p>
+          <p className={pnl == null ? "text-mute" : pnl >= 0 ? "text-neon" : "text-danger"}>
+            {pnl == null ? "—" : pct(pnl)}
+          </p>
+        </div>
+      </div>
+      <p className="mt-2 font-mono text-[11px] text-mute">
+        {tokensToUi(new BN(props.position.tokenAmountRaw), props.position.decimals)} {props.position.symbol} · cost {lamportsToSol(cost)} SOL
+      </p>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <label className="block">
+          <span className="block font-mono text-[10px] uppercase text-mute">TP %</span>
+          <input
+            className="w-full rounded border border-line bg-ink-900 px-2 py-1 font-mono text-xs"
+            value={tp}
+            placeholder="off"
+            onChange={(e) => setTP(e.target.value)}
+            onBlur={() => props.onSaveMeta({ takeProfitPct: tp.trim() ? Number(tp) : null })}
+          />
+        </label>
+        <label className="block">
+          <span className="block font-mono text-[10px] uppercase text-mute">SL %</span>
+          <input
+            className="w-full rounded border border-line bg-ink-900 px-2 py-1 font-mono text-xs"
+            value={sl}
+            placeholder="off"
+            onChange={(e) => setSL(e.target.value)}
+            onBlur={() => props.onSaveMeta({ stopLossPct: sl.trim() ? Number(sl) : null })}
+          />
+        </label>
+      </div>
+      <div className="mt-2 flex items-center justify-between text-[11px]">
+        <CopyButton value={props.position.mint} label="copy mint" />
+        <button
+          type="button"
+          className="font-mono text-[11px] text-mute hover:text-danger"
+          onClick={props.onRemove}
+        >
+          remove
+        </button>
+      </div>
+    </article>
+  );
+}
+
 function PositionRow({
   position,
   onUpdate,
+  accountId,
 }: {
   position: Row;
   onUpdate: () => void;
+  accountId: string | null;
 }) {
   const [tp, setTp] = useState<string>(position.takeProfitPct == null ? "" : String(position.takeProfitPct));
   const [sl, setSl] = useState<string>(position.stopLossPct == null ? "" : String(position.stopLossPct));
@@ -355,7 +449,7 @@ function PositionRow({
           onChange={(e) => setTp(e.target.value)}
           onBlur={() => {
             const v = tp.trim();
-            updatePositionMeta(position.mint, {
+            updatePositionMeta(accountId, position.mint, {
               takeProfitPct: v ? Number(v) : null,
             });
             onUpdate();
@@ -370,7 +464,7 @@ function PositionRow({
           onChange={(e) => setSl(e.target.value)}
           onBlur={() => {
             const v = sl.trim();
-            updatePositionMeta(position.mint, {
+            updatePositionMeta(accountId, position.mint, {
               stopLossPct: v ? Number(v) : null,
             });
             onUpdate();
@@ -382,7 +476,7 @@ function PositionRow({
           type="button"
           className="font-mono text-[11px] text-mute hover:text-danger"
           onClick={() => {
-            removePosition(position.mint);
+            removePosition(accountId, position.mint);
             onUpdate();
           }}
         >

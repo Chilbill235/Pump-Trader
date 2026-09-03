@@ -5,7 +5,10 @@ import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { appendBotLog } from "@/lib/bot-log";
 import { useSettings } from "./SettingsProvider";
+import { useActiveAccountId } from "./AccountsProvider";
 import { validateBotStart } from "@/lib/trade-limits";
+import { BOT_SESSION_KEY } from "@/lib/constants";
+import { safeWriteScoped } from "@/lib/accounts";
 
 type Props = {
   open: boolean;
@@ -18,6 +21,7 @@ export function StartBotModal({ open, onClose }: Props) {
   const { settings, update } = useSettings();
   const wallet = useWallet();
   const { connection } = useConnection();
+  const accountId = useActiveAccountId();
   const [durationH, setDurationH] = useState<number>(4);
   const [maxTrades, setMaxTrades] = useState<number>(10);
   const [perCoinCapSol, setPerCoinCapSol] = useState<number>(settings.maxPositionSol);
@@ -82,26 +86,23 @@ export function StartBotModal({ open, onClose }: Props) {
         stopLossPct: slPct,
         requireMetadata: true,
       });
-      appendBotLog({
+      appendBotLog(accountId, {
         kind: "start",
         simulate,
         message: `started (${simulate ? "paper" : "LIVE"}) — ${durationH}h window · cap ${maxTrades} trades · ${perCoinCapSol} SOL/coin · TP ${tpPct}% / SL ${slPct}% · daily loss ${dailyLossSol} SOL · slip ${slippage}%`,
       });
-      window.localStorage.setItem(
-        "pump-trader:bot-session:v1",
-        JSON.stringify({
-          startedAt: Date.now(),
-          durationHours: durationH,
-          maxTrades,
-          perCoinCapSol,
-          maxOpenPos,
-          dailyLossSol,
-          slippage,
-          tpPct,
-          slPct,
-          simulate,
-        }),
-      );
+      safeWriteScoped(accountId, BOT_SESSION_KEY, {
+        startedAt: Date.now(),
+        durationHours: durationH,
+        maxTrades,
+        perCoinCapSol,
+        maxOpenPos,
+        dailyLossSol,
+        slippage,
+        tpPct,
+        slPct,
+        simulate,
+      });
       onClose();
     } finally {
       setBusy(false);

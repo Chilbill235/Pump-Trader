@@ -14,6 +14,7 @@ import {
   saveSettings,
   type AppSettings,
 } from "@/lib/settings";
+import { useActiveAccountId } from "./AccountsProvider";
 
 type Ctx = {
   settings: AppSettings;
@@ -24,21 +25,31 @@ type Ctx = {
 const SettingsContext = createContext<Ctx | null>(null);
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
+  const accountId = useActiveAccountId();
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    setSettings(loadSettings());
+    if (!accountId) {
+      setSettings(DEFAULT_SETTINGS);
+      setHydrated(false);
+      return;
+    }
+    setSettings(loadSettings(accountId));
     setHydrated(true);
-  }, []);
+  }, [accountId]);
 
-  const update = useCallback((patch: Partial<AppSettings>) => {
-    setSettings((prev) => {
-      const next = { ...prev, ...patch };
-      saveSettings(next);
-      return next;
-    });
-  }, []);
+  const update = useCallback(
+    (patch: Partial<AppSettings>) => {
+      if (!accountId) return;
+      setSettings((prev) => {
+        const next = { ...prev, ...patch };
+        saveSettings(accountId, next);
+        return next;
+      });
+    },
+    [accountId],
+  );
 
   const value = useMemo(
     () => ({ settings, hydrated, update }),

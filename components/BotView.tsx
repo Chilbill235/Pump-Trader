@@ -27,6 +27,8 @@ import {
   type ClosedTrade,
   type Stats,
 } from "@/lib/stats";
+import { BOT_SESSION_KEY } from "@/lib/constants";
+import { safeReadScoped, removeScoped } from "@/lib/accounts";
 import { loadPositions, pnlPct } from "@/lib/positions";
 import { quoteTrade } from "@/lib/sdk";
 import {
@@ -38,8 +40,8 @@ import {
 } from "@/lib/bankroll";
 import { CoinImage } from "./CoinImage";
 import { useSettings } from "./SettingsProvider";
+import { useActiveAccountId } from "./AccountsProvider";
 
-const BOT_SESSION_KEY = "pump-trader:bot-session:v1";
 const POLL_MS = 12_000;
 
 type BotSession = {
@@ -55,20 +57,11 @@ type BotSession = {
   slPct?: number;
 };
 
-function loadSession(): BotSession | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(BOT_SESSION_KEY);
-    return raw ? (JSON.parse(raw) as BotSession) : null;
-  } catch {
-    return null;
-  }
-}
-
 export function BotView() {
   const wallet = useWallet();
   const { connection } = useConnection();
   const { settings } = useSettings();
+  const accountId = useActiveAccountId();
   const [log, setLog] = useState<BotLogEntry[]>([]);
   const [session, setSession] = useState<BotSession | null>(null);
   const [positionsPnl, setPositionsPnl] = useState<
@@ -83,12 +76,18 @@ export function BotView() {
   const lastEquitiesRef = useRef<{ mint: string; qty: number; cost: number }[]>([]);
 
   const reload = useCallback(() => {
-    setLog(loadBotLog());
-    setSession(loadSession());
-    setClosedTrades(loadClosedTrades());
-    setEquityCurve(loadEquityCurve());
-    setBankrollCfg(loadBankrollConfig());
-  }, []);
+    if (!accountId) return;
+    setLog(loadBotLog(accountId));
+    try {
+      const raw = safeReadScoped<BotSession | null>(accountId, BOT_SESSION_KEY, null);
+      setSession(raw);
+    } catch {
+      setSession(null);
+    }
+    setClosedTrades(loadClosedTrades(accountId));
+    setEquityCurve(loadEquityCurve(accountId));
+    setBankrollCfg(loadBankrollConfig(accountId));
+  }, [accountId]);
 
   useEffect(() => {
     reload();
@@ -101,7 +100,6 @@ export function BotView() {
     };
   }, [reload]);
 
-  // Live data: bankroll, SOL price, position values.
   const refreshLive = useCallback(async () => {
     try {
       if (wallet.publicKey) {
@@ -129,7 +127,8 @@ export function BotView() {
   }, [refreshLive]);
 
   const refreshPositions = useCallback(async () => {
-    const positions = loadPositions();
+    if (!accountId) return;
+    const positions = loadPositions(accountId);
     const enriched = await Promise.all(
       positions.map(async (p) => {
         const costSol = bnToSol(new BN(p.costLamports));
@@ -159,18 +158,16 @@ export function BotView() {
     );
     setPositionsPnl(enriched);
 
-    // record closed trades when local position cost is zero (just got fully sold)
     const previous = new Map(lastEquitiesRef.current.map((e) => [e.mint, e]));
     const current = enriched.map((e) => ({ mint: e.mint, qty: 0, cost: e.costSol }));
     current.forEach((c) => {
       const prev = previous.get(c.mint);
       if (prev && prev.cost > 0 && c.cost === 0) {
-        const realized = prev.cost * -1 * 0; // approx; the actual PnL is in log
-        void realized;
+        // realized PnL is recomputed in the closed-trade effect below
       }
     });
     lastEquitiesRef.current = current;
-  }, [connection, wallet.publicKey, settings.slippagePct]);
+  }, [connection, wallet.publicKey, settings.slippagePct, accountId]);
 
   useEffect(() => {
     void refreshPositions();
@@ -178,8 +175,8 @@ export function BotView() {
     return () => clearInterval(id);
   }, [refreshPositions]);
 
-  // Equity curve + bankroll tracking.
   useEffect(() => {
+    if (!accountId) return;
     if (bankrollSol == null) return;
     const positionsValueSol = positionsPnl.reduce((s, p) => s + (p.valueSol ?? 0), 0);
     const equity = bankrollSol + positionsValueSol;
@@ -193,14 +190,14 @@ export function BotView() {
         equitySol: equity,
         realizedPnlSol,
       };
-      const next = pushEquityPoint(point);
+      const next = pushEquityPoint(accountId, point);
       setEquityCurve(next);
-      updatePeakEquity(equity);
-      const start = getStartBankroll();
-      if (start <= 0) setStartBankroll(bankrollSol);
+      updatePeakEquity(accountId, equity);
+      const start = getStartBankroll(accountId);
+      if (start <= 0) setStartBankroll(accountId, bankrollSol);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bankrollSol, positionsPnl]);
+  }, [bankrollSol, positionsPnl, accountId]);
 
   const realizedPnlSol = useMemo(
     () => closedTrades.reduce((s, t) => s + t.pnlSol, 0),
@@ -213,61 +210,72 @@ export function BotView() {
 
   const stats: Stats = useMemo(() => {
     const positionsValueSol = positionsPnl.reduce((s, p) => s + (p.valueSol ?? 0), 0);
-    const startBankrollSol = getStartBankroll() || bankrollSol || 0;
+    const startBankrollSol = getStartBankroll(accountId) || bankrollSol || 0;
     return computeStats({
       closedTrades,
       bankrollSol: bankrollSol ?? 0,
       positionsValueSol,
       realizedPnlSol,
       startBankrollSol,
-      peakEquitySol: getPeakEquity(),
+      peakEquitySol: getPeakEquity(accountId),
     });
-  }, [closedTrades, bankrollSol, positionsPnl, realizedPnlSol]);
+  }, [closedTrades, bankrollSol, positionsPnl, realizedPnlSol, accountId]);
 
   // Kill-switch check.
   const realizedLossRefValue = realizedLossRef.current;
   useEffect(() => {
-    if (!session) return;
+    if (!session || !accountId) return;
     const result = evaluateBankroll({
+      accountId,
       bankrollSol: bankrollSol ?? 0,
       positionsValueSol: positionsPnl.reduce((s, p) => s + (p.valueSol ?? 0), 0),
       realizedLossSessionSol: realizedLossRefValue,
       cfg: bankrollCfg,
     });
     if (result.killSwitch && result.killSwitchReason) {
-      appendBotLog({
+      appendBotLog(accountId, {
         kind: "error",
         message: `KILL SWITCH: ${result.killSwitchReason}`,
       });
       try {
+        // Only disable this account's settings.
+        const key = `pump-trader:acct:${accountId}:settings:v1`;
+        const raw = window.localStorage.getItem(key);
+        const parsed = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
         window.localStorage.setItem(
-          "pump-trader:settings:v1",
-          JSON.stringify({ ...settings, autoTrade: false, autoSell: false, pipelineEnabled: false }),
+          key,
+          JSON.stringify({ ...parsed, autoTrade: false, autoSell: false, pipelineEnabled: false }),
         );
-        window.localStorage.removeItem(BOT_SESSION_KEY);
+        removeScoped(accountId, BOT_SESSION_KEY);
       } catch {
         // ignore
       }
       setSession(null);
       reload();
     }
-  }, [bankrollSol, positionsPnl, realizedLossRefValue, bankrollCfg, session, settings, reload]);
+  }, [bankrollSol, positionsPnl, realizedLossRefValue, bankrollCfg, session, accountId, reload]);
 
-  // detect new sells (paper or live) recorded into log to compute closed trade stats
   const seenTradeIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    const sells = log.filter((e) => e.kind === "sell_live" || e.kind === "sell_paper" || e.kind === "auto_sell_paper" || e.kind === "auto_sell_live");
+    if (!accountId) return;
+    const sells = log.filter(
+      (e) =>
+        e.kind === "sell_live" ||
+        e.kind === "sell_paper" ||
+        e.kind === "auto_sell_paper" ||
+        e.kind === "auto_sell_live",
+    );
     for (const e of sells) {
       if (!e.mint) continue;
       if (seenTradeIdsRef.current.has(e.id)) continue;
       seenTradeIdsRef.current.add(e.id);
-      const pos = loadPositions().find((p) => p.mint === e.mint);
+      const pos = loadPositions(accountId).find((p) => p.mint === e.mint);
       if (!pos) continue;
       const costSol = bnToSol(new BN(pos.costLamports));
       const solOut = e.sizeSol ?? 0;
       const pnlSol = solOut - costSol;
       const pnlPct = costSol > 0 ? (pnlSol / costSol) * 100 : 0;
-      appendClosedTrade({
+      appendClosedTrade(accountId, {
         mint: e.mint,
         symbol: pos.symbol,
         ts: e.ts,
@@ -279,33 +287,36 @@ export function BotView() {
         holdingMinutes: Math.max(0, (e.ts - pos.updatedAt) / 60000),
       });
     }
-    setClosedTrades(loadClosedTrades());
-  }, [log]);
+    setClosedTrades(loadClosedTrades(accountId));
+  }, [log, accountId]);
 
   function exportLog() {
+    if (!accountId) return;
     const blob = new Blob([JSON.stringify({ log, closedTrades, equityCurve }, null, 2)], {
       type: "application/json",
     });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `pump-trader-bot-log-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `pump-trader-bot-${accountId}-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   }
 
   function resetSessionStats() {
-    resetStatsForNewSession();
+    if (!accountId) return;
+    resetStatsForNewSession(accountId);
     setClosedTrades([]);
     setEquityCurve([]);
     reload();
-    appendBotLog({ kind: "stop", message: "stats reset (new session)" });
+    appendBotLog(accountId, { kind: "stop", message: "stats reset (new session)" });
   }
 
   function updateCfg(patch: Partial<BankrollConfig>) {
+    if (!accountId) return;
     const next = { ...bankrollCfg, ...patch };
     setBankrollCfg(next);
-    saveBankrollConfig(next);
+    saveBankrollConfig(accountId, next);
   }
 
   const walletOk = wallet.connected;
@@ -318,7 +329,7 @@ export function BotView() {
           <h1 className="font-mono text-lg tracking-wide">Bot</h1>
           <p className="text-xs text-mute">
             Real-time P&amp;L, equity curve, kill-switch, and full activity stream. Bankroll
-            protection auto-stops the bot on drawdown or session loss.
+            protection auto-stops the bot on drawdown or session loss. Scoped to this account only.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -365,7 +376,7 @@ export function BotView() {
                 ? `${bankrollSol.toFixed(4)} SOL bankroll`
                 : undefined
           }
-          tone={stats.equitySol >= (getStartBankroll() || 0) ? "neon" : "danger"}
+          tone={stats.equitySol >= (getStartBankroll(accountId) || 0) ? "neon" : "danger"}
         />
         <StatCard
           label="Realized PnL"

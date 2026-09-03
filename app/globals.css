@@ -15,6 +15,30 @@ body {
 
 body {
   font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Respect iOS safe areas for the sticky header / bottom sheet. */
+body {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Tighter buttons / inputs on mobile so they fit the screen. */
+@media (max-width: 640px) {
+  .wallet-adapter-button {
+    height: 32px !important;
+    font-size: 11px !important;
+    padding: 0 10px !important;
+  }
+  input[type="text"],
+  input[type="number"],
+  input[type="password"],
+  input[type="search"],
+  select {
+    font-size: 16px; /* prevents iOS Safari zoom-on-focus */
+  }
 }
 
 .wallet-adapter-button {
@@ -31,6 +55,23 @@ body {
 
 .wallet-adapter-modal-wrapper {
   background: #0d1017 !important;
+  /* Mobile: push modal to bottom for one-handed reach. */
+  align-items: flex-end !important;
+}
+@media (min-width: 640px) {
+  .wallet-adapter-modal-wrapper {
+    align-items: center !important;
+  }
+}
+
+.wallet-adapter-modal-container {
+  max-width: 100% !important;
+  border-radius: 12px 12px 0 0 !important;
+}
+@media (min-width: 640px) {
+  .wallet-adapter-modal-container {
+    border-radius: 12px !important;
+  }
 }
 
 input[type="number"]::-webkit-outer-spin-button,
@@ -46,4 +87,9 @@ input[type="number"]::-webkit-inner-spin-button {
 .scroll-thin::-webkit-scrollbar-thumb {
   background: #242a38;
   border-radius: 99px;
+}
+
+/* In-app browser banner indicator (set by WalletProvider). */
+body[data-in-app-browser="1"] header {
+  border-bottom-color: rgba(57, 255, 136, 0.4);
 }

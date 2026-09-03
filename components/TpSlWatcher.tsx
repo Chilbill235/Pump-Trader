@@ -4,54 +4,49 @@ import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import BN from "bn.js";
 import { useEffect, useState } from "react";
 import { ALERTS_KEY, TPSL_FIRED_KEY } from "@/lib/constants";
+import { safeReadScoped, safeWriteScoped } from "@/lib/accounts";
 import { appendBotLog } from "@/lib/bot-log";
 import { loadPositions, pnlPct, upsertPositionFromFill } from "@/lib/positions";
 import { quoteTrade } from "@/lib/sdk";
 import { simulateAndSend } from "@/lib/trade";
 import type { AppAlert, Position } from "@/lib/types";
 import { useSettings } from "./SettingsProvider";
+import { useActiveAccountId } from "./AccountsProvider";
 
-function loadAlerts(): AppAlert[] {
-  try {
-    const raw = window.localStorage.getItem(ALERTS_KEY);
-    return raw ? (JSON.parse(raw) as AppAlert[]) : [];
-  } catch {
-    return [];
-  }
+function loadAlerts(accountId: string | null): AppAlert[] {
+  if (!accountId) return [];
+  return safeReadScoped<AppAlert[]>(accountId, ALERTS_KEY, []);
 }
 
-function saveAlerts(alerts: AppAlert[]): void {
-  window.localStorage.setItem(ALERTS_KEY, JSON.stringify(alerts.slice(0, 20)));
+function saveAlerts(accountId: string | null, alerts: AppAlert[]): void {
+  if (!accountId) return;
+  safeWriteScoped(accountId, ALERTS_KEY, alerts.slice(0, 20));
 }
 
-function loadFiredKeys(): Set<string> {
-  try {
-    const raw = window.localStorage.getItem(TPSL_FIRED_KEY);
-    if (!raw) return new Set();
-    return new Set(JSON.parse(raw) as string[]);
-  } catch {
-    return new Set();
-  }
+function loadFiredKeys(accountId: string | null): Set<string> {
+  if (!accountId) return new Set();
+  const arr = safeReadScoped<string[]>(accountId, TPSL_FIRED_KEY, []);
+  return new Set(arr);
 }
 
-function saveFiredKeys(keys: Set<string>): void {
-  window.localStorage.setItem(
-    TPSL_FIRED_KEY,
-    JSON.stringify([...keys].slice(-100)),
-  );
+function saveFiredKeys(accountId: string | null, keys: Set<string>): void {
+  if (!accountId) return;
+  safeWriteScoped(accountId, TPSL_FIRED_KEY, [...keys].slice(-100));
 }
 
 export function TpSlWatcher() {
   const { connection } = useConnection();
   const wallet = useWallet();
   const { settings } = useSettings();
+  const accountId = useActiveAccountId();
   const [banner, setBanner] = useState<AppAlert | null>(null);
 
   useEffect(() => {
+    if (!accountId) return;
     let cancelled = false;
 
     async function tick() {
-      const positions = loadPositions().filter(
+      const positions = loadPositions(accountId).filter(
         (p) => p.takeProfitPct != null || p.stopLossPct != null,
       );
       if (positions.length === 0) return;
@@ -79,12 +74,12 @@ export function TpSlWatcher() {
 
         const pnlBucket = kind === "take-profit" ? Math.floor(pnl) : Math.ceil(pnl);
         const key = `${p.mint}:${kind}:${pnlBucket}`;
-        const fired = loadFiredKeys();
+        const fired = loadFiredKeys(accountId);
         if (fired.has(key)) return;
         fired.add(key);
-        saveFiredKeys(fired);
+        saveFiredKeys(accountId, fired);
 
-        appendBotLog({
+        appendBotLog(accountId, {
           kind: kind === "take-profit" ? "tp_hit" : "sl_hit",
           mint: p.mint,
           symbol: p.symbol,
@@ -106,6 +101,7 @@ export function TpSlWatcher() {
               paper: autoSellPaper,
             });
             upsertPositionFromFill({
+              accountId,
               mint: p.mint,
               name: p.name,
               symbol: p.symbol,
@@ -117,17 +113,19 @@ export function TpSlWatcher() {
               paper: receipt.paper,
             });
             autoSold = true;
-            appendBotLog({
+            appendBotLog(accountId, {
               kind: receipt.paper ? "auto_sell_paper" : "auto_sell_live",
               mint: p.mint,
               symbol: p.symbol,
               signature: receipt.signature ?? undefined,
               sizeSol: Number(new BN(receipt.solLamports).toString()) / 1e9,
-              message: receipt.paper ? `paper auto-sell at ${pnl.toFixed(2)}%` : `live auto-sell at ${pnl.toFixed(2)}%`,
+              message: receipt.paper
+                ? `paper auto-sell at ${pnl.toFixed(2)}%`
+                : `live auto-sell at ${pnl.toFixed(2)}%`,
             });
           } catch (err) {
             autoSold = false;
-            appendBotLog({
+            appendBotLog(accountId, {
               kind: "error",
               mint: p.mint,
               symbol: p.symbol,
@@ -149,8 +147,8 @@ export function TpSlWatcher() {
             ? `${p.symbol} ${kind} hit (${pnl.toFixed(1)}%). Auto-sell ${autoSellPaper ? "paper-filled" : "submitted"}.`
             : `${p.symbol} ${kind} hit (${pnl.toFixed(1)}%). Auto-sell ${settings.autoSell ? "failed" : "is OFF"} — this is an alert only.`,
         };
-        const next = [alert, ...loadAlerts()];
-        saveAlerts(next);
+        const next = [alert, ...loadAlerts(accountId)];
+        saveAlerts(accountId, next);
         if (!cancelled) setBanner(alert);
         if (typeof Notification !== "undefined" && Notification.permission === "granted") {
           new Notification("Pump trader alert", { body: alert.message });
@@ -166,7 +164,7 @@ export function TpSlWatcher() {
       cancelled = true;
       clearInterval(id);
     };
-  }, [connection, wallet, settings.autoSell, settings.simulateMode, settings.slippagePct]);
+  }, [connection, wallet, settings.autoSell, settings.simulateMode, settings.slippagePct, accountId]);
 
   if (!banner) return null;
   return (

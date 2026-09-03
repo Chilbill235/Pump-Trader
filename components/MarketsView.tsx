@@ -76,12 +76,12 @@ export function MarketsView() {
             Honest buy/sell client. Not a sniper. Click any row to trade. Simulate mode is on by default.
           </p>
         </div>
-        <form onSubmit={onSearch} className="flex gap-2">
+        <form onSubmit={onSearch} className="flex w-full gap-2 sm:w-auto">
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Paste mint, search name / ticker"
-            className="w-80 rounded border border-line bg-ink-800 px-3 py-1.5 font-mono text-sm outline-none focus:border-neon"
+            className="w-full rounded border border-line bg-ink-800 px-3 py-1.5 font-mono text-sm outline-none focus:border-neon sm:w-80"
           />
           <button
             type="submit"
@@ -131,7 +131,7 @@ export function MarketsView() {
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
-        <div className="overflow-x-auto rounded border border-line">
+        <div className="rounded border border-line">
           {loading ? (
             <div className="p-8 text-center text-sm text-mute">Loading coins…</div>
           ) : coins.length === 0 && !error ? (
@@ -139,77 +139,112 @@ export function MarketsView() {
               No coins returned. Paste a mint above.
             </div>
           ) : (
-            <table className="w-full min-w-[860px] text-left text-sm">
-              <thead className="bg-ink-800 font-mono text-[11px] uppercase text-mute">
-                <tr>
-                  <th className="px-3 py-2">Coin</th>
-                  <th className="px-3 py-2">Mint</th>
-                  <th className="px-3 py-2">MC USD</th>
-                  <th className="px-3 py-2">MC SOL</th>
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2">Last</th>
-                  <th className="px-3 py-2"></th>
-                </tr>
-              </thead>
-              <tbody>
+            <>
+              {/* Mobile cards */}
+              <ul className="divide-y divide-line sm:hidden">
                 {coins.map((c) => {
                   const active = activeMint === c.mint;
                   return (
-                    <tr
+                    <li
                       key={c.mint}
-                      className={`cursor-pointer border-t border-line transition ${
+                      onClick={() => setActiveMint(c.mint)}
+                      className={`flex cursor-pointer items-center gap-2 px-3 py-2 ${
                         active ? "bg-neon/10" : "hover:bg-ink-800/80"
                       }`}
-                      onClick={() => setActiveMint(c.mint)}
                     >
-                      <td className="px-3 py-2">
-                        <div className="flex items-center gap-2">
-                          <CoinImage src={c.imageUri ?? null} alt={c.symbol} size={28} />
-                          <div>
-                            <div className="font-medium">{c.name}</div>
-                            <div className="font-mono text-[11px] text-mute">{c.symbol}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="flex items-center gap-2 font-mono text-xs">
-                          {shortenAddress(c.mint, 6, 6)}
-                          <CopyButton value={c.mint} label="copy" />
-                        </div>
-                      </td>
-                      <td className="px-3 py-2 font-mono text-xs">
-                        {formatUsd(c.usdMarketCap ?? null)}
-                      </td>
-                      <td className="px-3 py-2 font-mono text-xs">
-                        {c.marketCapSol != null ? compactNumber(c.marketCapSol) : "—"}
-                      </td>
-                      <td className="px-3 py-2 font-mono text-[11px]">
-                        {c.complete ? (
-                          <span className="text-warn">graduated</span>
-                        ) : (
-                          <span className="text-neon">curve</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 font-mono text-[11px] text-mute">
-                        {c.lastTradeAt ? timeAgo(c.lastTradeAt) : c.createdAt ? timeAgo(c.createdAt) : "—"}
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        <button
-                          type="button"
-                          className="rounded bg-neon/10 px-2 py-1 font-mono text-[11px] text-neon hover:bg-neon/20"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setActiveMint(c.mint);
-                          }}
-                        >
-                          Trade
-                        </button>
-                      </td>
-                    </tr>
+                      <CoinImage src={c.imageUri ?? null} alt={c.symbol} size={28} />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm">{c.name}</p>
+                        <p className="truncate font-mono text-[11px] text-mute">
+                          {c.symbol} · {formatUsd(c.usdMarketCap ?? null)}
+                        </p>
+                      </div>
+                      <span
+                        className={`font-mono text-[11px] ${
+                          c.complete ? "text-warn" : "text-neon"
+                        }`}
+                      >
+                        {c.complete ? "grad" : "curve"}
+                      </span>
+                    </li>
                   );
                 })}
-              </tbody>
-            </table>
+              </ul>
+              {/* Desktop table */}
+              <div className="hidden overflow-x-auto sm:block">
+                <table className="w-full min-w-[860px] text-left text-sm">
+                  <thead className="bg-ink-800 font-mono text-[11px] uppercase text-mute">
+                    <tr>
+                      <th className="px-3 py-2">Coin</th>
+                      <th className="px-3 py-2">Mint</th>
+                      <th className="px-3 py-2">MC USD</th>
+                      <th className="px-3 py-2">MC SOL</th>
+                      <th className="px-3 py-2">Status</th>
+                      <th className="px-3 py-2">Last</th>
+                      <th className="px-3 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {coins.map((c) => {
+                      const active = activeMint === c.mint;
+                      return (
+                        <tr
+                          key={c.mint}
+                          className={`cursor-pointer border-t border-line transition ${
+                            active ? "bg-neon/10" : "hover:bg-ink-800/80"
+                          }`}
+                          onClick={() => setActiveMint(c.mint)}
+                        >
+                          <td className="px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <CoinImage src={c.imageUri ?? null} alt={c.symbol} size={28} />
+                              <div>
+                                <div className="font-medium">{c.name}</div>
+                                <div className="font-mono text-[11px] text-mute">{c.symbol}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="flex items-center gap-2 font-mono text-xs">
+                              {shortenAddress(c.mint, 6, 6)}
+                              <CopyButton value={c.mint} label="copy" />
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 font-mono text-xs">
+                            {formatUsd(c.usdMarketCap ?? null)}
+                          </td>
+                          <td className="px-3 py-2 font-mono text-xs">
+                            {c.marketCapSol != null ? compactNumber(c.marketCapSol) : "—"}
+                          </td>
+                          <td className="px-3 py-2 font-mono text-[11px]">
+                            {c.complete ? (
+                              <span className="text-warn">graduated</span>
+                            ) : (
+                              <span className="text-neon">curve</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 font-mono text-[11px] text-mute">
+                            {c.lastTradeAt ? timeAgo(c.lastTradeAt) : c.createdAt ? timeAgo(c.createdAt) : "—"}
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            <button
+                              type="button"
+                              className="rounded bg-neon/10 px-2 py-1 font-mono text-[11px] text-neon hover:bg-neon/20"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveMint(c.mint);
+                              }}
+                            >
+                              Trade
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
 
@@ -231,7 +266,7 @@ export function MarketsView() {
               <p className="font-medium">Pick a coin to start.</p>
               <p className="mt-1 font-mono text-[11px]">
                 Click any row in the markets list (or paste a mint above) to open the trade panel
-                without. the extra click.
+                without the extra click.
               </p>
             </div>
           )}

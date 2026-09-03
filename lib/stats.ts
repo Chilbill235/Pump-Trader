@@ -1,26 +1,18 @@
 import BN from "bn.js";
-
-const KEY = "pump-trader:equity:v1";
-const MAX_POINTS = 240; // ~2h at 30s tick
+import {
+  CLOSED_TRADES_KEY,
+  EQUITY_KEY,
+  PEAK_KEY,
+  START_BANKROLL_KEY,
+} from "./constants";
+import { safeReadScoped, safeWriteScoped, removeScoped } from "./accounts";
 
 export type EquityPoint = {
   ts: number;
-  bankrollSol: number; // wallet SOL
+  bankrollSol: number;
   positionsValueSol: number;
-  equitySol: number; // bankroll + positionsValue
+  equitySol: number;
   realizedPnlSol: number;
-};
-
-export type TradeOutcome = {
-  mint: string;
-  symbol: string;
-  side: "buy" | "sell";
-  ts: number;
-  solIn: number;
-  solOut: number;
-  pnlSol: number;
-  pnlPct: number;
-  paper: boolean;
 };
 
 export type ClosedTrade = {
@@ -35,88 +27,71 @@ export type ClosedTrade = {
   holdingMinutes: number;
 };
 
-const TRADES_KEY = "pump-trader:closed-trades:v1";
+const MAX_POINTS = 240;
 const TRADES_MAX = 200;
-const PEAK_KEY = "pump-trader:peak-equity:v1";
-const START_BANKROLL_KEY = "pump-trader:start-bankroll:v1";
 
-function readJson<T>(key: string, fallback: T): T {
-  if (typeof window === "undefined") return fallback;
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return fallback;
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
+export function loadEquityCurve(accountId: string | null): EquityPoint[] {
+  return safeReadScoped<EquityPoint[]>(accountId, EQUITY_KEY, []);
 }
 
-function writeJson<T>(key: string, value: T) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // ignore
-  }
-}
-
-export function loadEquityCurve(): EquityPoint[] {
-  return readJson<EquityPoint[]>(KEY, []);
-}
-
-export function pushEquityPoint(point: EquityPoint): EquityPoint[] {
-  const list = [...loadEquityCurve(), point].slice(-MAX_POINTS);
-  writeJson(KEY, list);
+export function pushEquityPoint(accountId: string | null, point: EquityPoint): EquityPoint[] {
+  if (!accountId) return [];
+  const list = [...loadEquityCurve(accountId), point].slice(-MAX_POINTS);
+  safeWriteScoped(accountId, EQUITY_KEY, list);
   return list;
 }
 
-export function clearEquityCurve(): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.removeItem(KEY);
+export function clearEquityCurve(accountId: string | null): void {
+  removeScoped(accountId, EQUITY_KEY);
 }
 
-export function loadClosedTrades(): ClosedTrade[] {
-  return readJson<ClosedTrade[]>(TRADES_KEY, []);
+export function loadClosedTrades(accountId: string | null): ClosedTrade[] {
+  return safeReadScoped<ClosedTrade[]>(accountId, CLOSED_TRADES_KEY, []);
 }
 
-export function appendClosedTrade(t: ClosedTrade): ClosedTrade[] {
-  const list = [t, ...loadClosedTrades()].slice(0, TRADES_MAX);
-  writeJson(TRADES_KEY, list);
+export function appendClosedTrade(
+  accountId: string | null,
+  t: ClosedTrade,
+): ClosedTrade[] {
+  if (!accountId) return [];
+  const list = [t, ...loadClosedTrades(accountId)].slice(0, TRADES_MAX);
+  safeWriteScoped(accountId, CLOSED_TRADES_KEY, list);
   return list;
 }
 
-export function getPeakEquity(): number {
-  return readJson<number>(PEAK_KEY, 0);
+export function getPeakEquity(accountId: string | null): number {
+  return safeReadScoped<number>(accountId, PEAK_KEY, 0);
 }
 
-export function updatePeakEquity(equity: number): number {
-  const peak = getPeakEquity();
+export function updatePeakEquity(accountId: string | null, equity: number): number {
+  if (!accountId) return 0;
+  const peak = getPeakEquity(accountId);
   const next = Math.max(peak, equity);
-  writeJson(PEAK_KEY, next);
+  safeWriteScoped(accountId, PEAK_KEY, next);
   return next;
 }
 
-export function getStartBankroll(): number {
-  return readJson<number>(START_BANKROLL_KEY, 0);
+export function getStartBankroll(accountId: string | null): number {
+  return safeReadScoped<number>(accountId, START_BANKROLL_KEY, 0);
 }
 
-export function setStartBankroll(sol: number): void {
-  writeJson(START_BANKROLL_KEY, sol);
+export function setStartBankroll(accountId: string | null, sol: number): void {
+  safeWriteScoped(accountId, START_BANKROLL_KEY, sol);
 }
 
-export function resetStatsForNewSession(): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.removeItem(KEY);
-  window.localStorage.removeItem(PEAK_KEY);
-  window.localStorage.removeItem(START_BANKROLL_KEY);
-  window.localStorage.removeItem(TRADES_KEY);
+export function resetStatsForNewSession(accountId: string | null): void {
+  if (!accountId) return;
+  removeScoped(accountId, EQUITY_KEY);
+  removeScoped(accountId, PEAK_KEY);
+  removeScoped(accountId, START_BANKROLL_KEY);
+  removeScoped(accountId, CLOSED_TRADES_KEY);
 }
 
 export type Stats = {
   closed: number;
   wins: number;
   losses: number;
-  winRate: number; // 0..1
+  winRate: number;
   realizedPnlSol: number;
   realizedPnlPct: number;
   avgWinSol: number;
@@ -170,7 +145,7 @@ export function computeStats(args: {
     bestTradeSol,
     worstTradeSol,
     exposureSol: args.positionsValueSol,
-    unrealizedPnlSol: args.positionsValueSol - 0, // realized tracked separately
+    unrealizedPnlSol: args.positionsValueSol,
     equitySol,
     peakEquitySol: args.peakEquitySol,
     drawdownSol,

@@ -1,14 +1,12 @@
-import {
-  appendBotLog,
-  type BotLogKind,
-} from "./bot-log";
-import { getStartBankroll, updatePeakEquity, getPeakEquity } from "./stats";
+import { BANKROLL_KEY } from "./constants";
+import { safeReadScoped, safeWriteScoped } from "./accounts";
+import { getPeakEquity, updatePeakEquity, getStartBankroll } from "./stats";
 
 export type BankrollConfig = {
   enabled: boolean;
-  equityFloorSol: number; // hard floor; stop bot when equity drops below
-  drawdownPct: number; // 0.10 = 10% from peak → stop
-  maxLossPerSessionSol: number; // stop after losing this much realized in current session
+  equityFloorSol: number;
+  drawdownPct: number;
+  maxLossPerSessionSol: number;
 };
 
 export const DEFAULT_BANKROLL_CONFIG: BankrollConfig = {
@@ -18,26 +16,19 @@ export const DEFAULT_BANKROLL_CONFIG: BankrollConfig = {
   maxLossPerSessionSol: 0.5,
 };
 
-const KEY = "pump-trader:bankroll-config:v1";
-
-export function loadBankrollConfig(): BankrollConfig {
-  if (typeof window === "undefined") return DEFAULT_BANKROLL_CONFIG;
+export function loadBankrollConfig(accountId: string | null): BankrollConfig {
+  if (typeof window === "undefined" || !accountId) return DEFAULT_BANKROLL_CONFIG;
   try {
-    const raw = window.localStorage.getItem(KEY);
-    if (!raw) return DEFAULT_BANKROLL_CONFIG;
-    return { ...DEFAULT_BANKROLL_CONFIG, ...(JSON.parse(raw) as Partial<BankrollConfig>) };
+    const parsed = safeReadScoped<Partial<BankrollConfig>>(accountId, BANKROLL_KEY, {});
+    return { ...DEFAULT_BANKROLL_CONFIG, ...parsed };
   } catch {
     return DEFAULT_BANKROLL_CONFIG;
   }
 }
 
-export function saveBankrollConfig(cfg: BankrollConfig) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(KEY, JSON.stringify(cfg));
-  } catch {
-    // ignore
-  }
+export function saveBankrollConfig(accountId: string | null, cfg: BankrollConfig) {
+  if (typeof window === "undefined" || !accountId) return;
+  safeWriteScoped(accountId, BANKROLL_KEY, cfg);
 }
 
 export type BankrollCheck = {
@@ -48,6 +39,7 @@ export type BankrollCheck = {
 };
 
 export function evaluateBankroll(args: {
+  accountId: string | null;
   bankrollSol: number;
   positionsValueSol: number;
   realizedLossSessionSol: number;
@@ -63,7 +55,7 @@ export function evaluateBankroll(args: {
       killSwitchReason = `Equity floor ${args.cfg.equityFloorSol.toFixed(3)} SOL breached (current ${equity.toFixed(4)} SOL). Bot stopped.`;
       reasons.push(killSwitchReason);
     }
-    const peak = getPeakEquity();
+    const peak = getPeakEquity(args.accountId);
     if (peak > 0) {
       const dd = (peak - equity) / peak;
       if (dd >= args.cfg.drawdownPct) {
@@ -81,32 +73,14 @@ export function evaluateBankroll(args: {
   return { ok: !killSwitch, reasons, killSwitch, killSwitchReason };
 }
 
-export function noteEquityForStats(equitySol: number): void {
-  updatePeakEquity(equitySol);
+export function noteEquityForStats(accountId: string | null, equitySol: number): void {
+  updatePeakEquity(accountId, equitySol);
 }
 
-export function startBankrollTrackingIfNeeded(currentSol: number): void {
-  const start = getStartBankroll();
+export function startBankrollTrackingIfNeeded(accountId: string | null, currentSol: number): void {
+  if (!accountId) return;
+  const start = getStartBankroll(accountId);
   if (start <= 0) {
-    try {
-      window.localStorage.setItem("pump-trader:start-bankroll:v1", JSON.stringify(currentSol));
-    } catch {
-      // ignore
-    }
-  }
-}
-
-export function tripKillSwitchFromBot(cfg: BankrollConfig, args: {
-  bankrollSol: number;
-  positionsValueSol: number;
-  realizedLossSessionSol: number;
-}, stopFn: () => void) {
-  const result = evaluateBankroll({ ...args, cfg });
-  if (result.killSwitch && result.killSwitchReason) {
-    appendBotLog({ kind: "error", message: `KILL SWITCH: ${result.killSwitchReason}` } as unknown as {
-      kind: BotLogKind;
-      message: string;
-    });
-    stopFn();
+    safeWriteScoped(accountId, "start-bankroll:v1", currentSol);
   }
 }

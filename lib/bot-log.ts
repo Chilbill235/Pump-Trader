@@ -1,3 +1,6 @@
+import { BOT_LOG_KEY } from "./constants";
+import { safeReadScoped, safeWriteScoped } from "./accounts";
+
 export type BotLogKind =
   | "start"
   | "stop"
@@ -30,34 +33,25 @@ export type BotLogEntry = {
   simulate?: boolean;
 };
 
-const KEY = "pump-trader:bot-log:v1";
-
-function safeRead(): BotLogEntry[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as BotLogEntry[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+function safeRead(accountId: string | null): BotLogEntry[] {
+  if (typeof window === "undefined" || !accountId) return [];
+  return safeReadScoped<BotLogEntry[]>(accountId, BOT_LOG_KEY, []);
 }
 
-function safeWrite(list: BotLogEntry[]) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(KEY, JSON.stringify(list.slice(0, 500)));
-  } catch {
-    // ignore quota
-  }
+function safeWrite(accountId: string | null, list: BotLogEntry[]) {
+  if (typeof window === "undefined" || !accountId) return;
+  safeWriteScoped(accountId, BOT_LOG_KEY, list.slice(0, 500));
 }
 
-export function loadBotLog(): BotLogEntry[] {
-  return safeRead();
+export function loadBotLog(accountId: string | null): BotLogEntry[] {
+  return safeRead(accountId);
 }
 
-export function appendBotLog(entry: Omit<BotLogEntry, "id" | "ts">): BotLogEntry[] {
+export function appendBotLog(
+  accountId: string | null,
+  entry: Omit<BotLogEntry, "id" | "ts">,
+): BotLogEntry[] {
+  if (!accountId) return [];
   const next: BotLogEntry[] = [
     {
       ...entry,
@@ -67,15 +61,15 @@ export function appendBotLog(entry: Omit<BotLogEntry, "id" | "ts">): BotLogEntry
           : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       ts: Date.now(),
     },
-    ...safeRead(),
+    ...safeRead(accountId),
   ];
-  safeWrite(next);
+  safeWrite(accountId, next);
   return next;
 }
 
-export function clearBotLog(): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.removeItem(KEY);
+export function clearBotLog(accountId: string | null): void {
+  if (typeof window === "undefined" || !accountId) return;
+  safeWriteScoped(accountId, BOT_LOG_KEY, []);
 }
 
 export function botLogKindLabel(kind: BotLogKind): { label: string; tone: "ok" | "warn" | "danger" | "mute" } {

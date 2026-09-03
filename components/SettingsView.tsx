@@ -2,19 +2,25 @@
 
 import { DEFAULT_RPC } from "@/lib/constants";
 import { useSettings } from "./SettingsProvider";
+import { useActiveAccountId } from "./AccountsProvider";
+import { getAccountPrefix } from "@/lib/accounts";
 
 export function SettingsView() {
   const { settings, update } = useSettings();
+  const accountId = useActiveAccountId();
 
   const exportData = () => {
     const data: Record<string, unknown> = {};
+    const prefix = accountId ? getAccountPrefix(accountId) : "";
+    if (typeof window === "undefined" || !prefix) return;
     for (let i = 0; i < window.localStorage.length; i++) {
       const key = window.localStorage.key(i);
-      if (key && key.startsWith("pump-trader:")) {
+      if (key && key.startsWith(prefix)) {
+        const sub = key.slice(prefix.length);
         try {
-          data[key] = JSON.parse(window.localStorage.getItem(key) || "null");
+          data[sub] = JSON.parse(window.localStorage.getItem(key) || "null");
         } catch {
-          data[key] = window.localStorage.getItem(key);
+          data[sub] = window.localStorage.getItem(key);
         }
       }
     }
@@ -22,7 +28,7 @@ export function SettingsView() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `pump-trader-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `pump-trader-${accountId}-backup-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -34,10 +40,14 @@ export function SettingsView() {
     reader.onload = () => {
       try {
         const data = JSON.parse(reader.result as string) as Record<string, unknown>;
-        for (const [key, value] of Object.entries(data)) {
-          if (key.startsWith("pump-trader:")) {
-            window.localStorage.setItem(key, JSON.stringify(value));
-          }
+        const prefix = accountId ? getAccountPrefix(accountId) : "";
+        if (!prefix) {
+          alert("Unlock your account first.");
+          return;
+        }
+        for (const [sub, value] of Object.entries(data)) {
+          if (typeof sub !== "string") continue;
+          window.localStorage.setItem(prefix + sub, JSON.stringify(value));
         }
         window.location.reload();
       } catch {
@@ -53,7 +63,8 @@ export function SettingsView() {
       <div>
         <h1 className="font-mono text-lg tracking-wide">Settings</h1>
         <p className="text-xs text-mute">
-          Stored in this browser only. No custodial backend. Never paste a private key.
+          Stored in this browser only, scoped to your account. No custodial backend. Never paste a
+          private key.
         </p>
       </div>
 
@@ -201,9 +212,10 @@ export function SettingsView() {
       <div className="border-t border-line pt-4">
         <h2 className="font-mono text-sm tracking-wide">Data</h2>
         <p className="mb-3 text-xs text-mute">
-          Export or import your local backup (settings, positions, pipeline log, alerts).
+          Export or import your account backup (settings, positions, pipeline log, alerts).
+          Backups are scoped to this account and cannot be loaded into another one.
         </p>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
             onClick={exportData}
@@ -221,7 +233,7 @@ export function SettingsView() {
       <div className="border-t border-line pt-4">
         <h2 className="font-mono text-sm tracking-wide text-danger">Emergency stop</h2>
         <p className="mb-3 text-xs text-mute">
-          Immediately disable auto-sell and auto-trade. Does not close positions.
+          Immediately disable auto-sell and auto-trade for this account. Does not close positions.
         </p>
         <button
           type="button"
