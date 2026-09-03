@@ -45,7 +45,7 @@ export function ConfirmDialog({
   const titleId = "confirm-dialog-title";
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center overflow-hidden bg-black/70 sm:items-center sm:p-4"
       role="presentation"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onCancel();
@@ -56,13 +56,15 @@ export function ConfirmDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="w-full max-w-md rounded-lg border border-line bg-ink-800 p-4 shadow-2xl"
+        className="flex max-h-[90vh] w-full max-w-md flex-col rounded-t-xl border border-line bg-ink-800 shadow-2xl sm:rounded-xl"
       >
-        <h2 id={titleId} className="mb-2 font-mono text-sm tracking-wide text-white">
+        <h2 id={titleId} className="shrink-0 px-4 pt-4 font-mono text-sm tracking-wide text-white">
           {title}
         </h2>
-        <div className="mb-4 text-sm text-mute">{body}</div>
-        <div className="flex justify-end gap-2">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2 text-sm text-mute scroll-thin">
+          {body}
+        </div>
+        <div className="flex shrink-0 justify-end gap-2 border-t border-line/60 px-4 py-3">
           <button
             ref={cancelRef}
             type="button"

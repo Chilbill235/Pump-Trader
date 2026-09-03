@@ -6,7 +6,7 @@ import { useAccounts } from "./AccountsProvider";
 type Mode = "create" | "unlock";
 
 export function LoginScreen() {
-  const { capable, accounts, create, unlock, switchTo, activeId, ready } = useAccounts();
+  const { capable, accounts, create, unlock, ready } = useAccounts();
   const [mode, setMode] = useState<Mode>("create");
   const [username, setUsername] = useState("");
   const [pin, setPin] = useState("");
@@ -14,10 +14,20 @@ export function LoginScreen() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hydratedOnce, setHydratedOnce] = useState(false);
 
   useEffect(() => {
     if (!selectedId && accounts[0]) setSelectedId(accounts[0].id);
   }, [accounts, selectedId]);
+
+  // After the account list hydrates from storage, default to unlocking an
+  // existing account instead of forcing the user back through the create flow.
+  useEffect(() => {
+    if (ready && !hydratedOnce) {
+      setHydratedOnce(true);
+      if (accounts.length > 0) setMode("unlock");
+    }
+  }, [ready, accounts.length, hydratedOnce]);
 
   if (!ready) {
     return (
@@ -43,6 +53,10 @@ export function LoginScreen() {
     setError(null);
     try {
       if (mode === "create") {
+        if (pin.length < 4) {
+          setError("PIN must be at least 4 characters.");
+          return;
+        }
         if (pin !== confirm) {
           setError("PIN entries do not match.");
           return;
@@ -52,6 +66,7 @@ export function LoginScreen() {
         else {
           setPin("");
           setConfirm("");
+          // AccountsProvider will switch to the shell automatically.
         }
       } else {
         if (!selectedId) {
@@ -119,8 +134,7 @@ export function LoginScreen() {
                   value={selectedId ?? ""}
                   onChange={(e) => {
                     setSelectedId(e.target.value);
-                    switchTo(e.target.value);
-                    void activeId;
+                    setError(null);
                   }}
                   className="mt-1 w-full rounded border border-line bg-ink-900 px-3 py-2 font-mono text-sm"
                 >

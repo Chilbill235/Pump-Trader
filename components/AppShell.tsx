@@ -145,10 +145,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-ink-950 text-zinc-100">
       <header className="sticky top-0 z-30 border-b border-line bg-ink-900/95 backdrop-blur">
-        <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-3 px-3 py-2.5 sm:px-4">
+        <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-2 px-3 py-2.5 sm:gap-3 sm:px-4">
           <button
             type="button"
-            className="rounded border border-line px-2 py-1 text-sm sm:hidden"
+            className="shrink-0 rounded border border-line px-2 py-1 text-sm sm:hidden"
             onClick={() => setNavOpen((v) => !v)}
             aria-label="Toggle menu"
           >
@@ -181,13 +181,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               );
             })}
           </nav>
-          <div className="ml-auto flex flex-wrap items-center gap-2">
+          <div className="ml-auto flex shrink-0 items-center gap-2 overflow-x-auto scroll-thin">
             {connected ? (
               botRunning ? (
                 <button
                   type="button"
                   onClick={stopBot}
-                  className="rounded border border-danger/60 bg-danger/10 px-2 py-1 font-mono text-[11px] text-danger hover:bg-danger/20"
+                  className="shrink-0 rounded border border-danger/60 bg-danger/10 px-2 py-1 font-mono text-[11px] text-danger hover:bg-danger/20"
                   title={`Started ${new Date(botSession!.startedAt).toLocaleTimeString()}`}
                 >
                   STOP BOT
@@ -196,32 +196,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <button
                   type="button"
                   onClick={() => setBotModalOpen(true)}
-                  className="rounded border border-neon/60 bg-neon/10 px-2 py-1 font-mono text-[11px] text-neon hover:bg-neon/20"
+                  className="shrink-0 rounded border border-neon/60 bg-neon/10 px-2 py-1 font-mono text-[11px] text-neon hover:bg-neon/20"
                 >
                   START BOT
                 </button>
               )
             ) : null}
             <span
-              className={`rounded border px-2 py-0.5 font-mono text-[11px] ${
+              className={`shrink-0 rounded border px-2 py-0.5 font-mono text-[11px] ${
                 settings.simulateMode
                   ? "border-warn/40 bg-warn/10 text-warn"
                   : "border-danger/40 bg-danger/10 text-danger"
               }`}
             >
-              {settings.simulateMode ? "SIMULATE / PAPER" : "LIVE MAINNET"}
+              {settings.simulateMode ? "SIMULATE" : "LIVE MAINNET"}
             </span>
             {botRunning ? (
-              <span className="hidden rounded border border-neon/40 bg-neon/10 px-2 py-0.5 font-mono text-[11px] text-neon animate-pulse sm:inline">
+              <span className="hidden shrink-0 rounded border border-neon/40 bg-neon/10 px-2 py-0.5 font-mono text-[11px] text-neon animate-pulse sm:inline">
                 BOT RUNNING
               </span>
             ) : autoTradeActive ? (
-              <span className="hidden rounded border border-neon/40 bg-neon/10 px-2 py-0.5 font-mono text-[11px] text-neon animate-pulse sm:inline">
+              <span className="hidden shrink-0 rounded border border-neon/40 bg-neon/10 px-2 py-0.5 font-mono text-[11px] text-neon animate-pulse sm:inline">
                 AUTO-TRADE ON
               </span>
             ) : null}
             {publicKey ? (
-              <span className="font-mono text-xs text-mute">
+              <span className="shrink-0 font-mono text-xs text-mute">
                 {solErr
                   ? "RPC err"
                   : sol == null
@@ -233,13 +233,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <button
                 type="button"
                 onClick={() => setShowMobileConnect(true)}
-                className="rounded bg-neon px-3 py-1.5 font-mono text-xs text-ink-950"
+                className="shrink-0 rounded bg-neon px-3 py-1.5 font-mono text-xs text-ink-950"
               >
                 Connect
               </button>
             ) : null}
             {(!mobile || isInAppBrowser()) && mounted ? (
-              <div suppressHydrationWarning>
+              <div className="shrink-0" suppressHydrationWarning>
                 <WalletMultiButton />
               </div>
             ) : null}

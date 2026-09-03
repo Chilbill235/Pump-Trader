@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { appendBotLog } from "@/lib/bot-log";
@@ -35,9 +35,10 @@ export function StartBotModal({ open, onClose }: Props) {
   const [busy, setBusy] = useState(false);
   const [balanceLamports, setBalanceLamports] = useState<number | null>(null);
   const [solUsd, setSolUsd] = useState<number | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!open || ! wallet.publicKey) {
+    if (!open || !wallet.publicKey) {
       setBalanceLamports(null);
       return;
     }
@@ -61,6 +62,22 @@ export function StartBotModal({ open, onClose }: Props) {
     };
   }, [open, wallet.publicKey, connection]);
 
+  useEffect(() => {
+    if (!open) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    panelRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+      previouslyFocused?.focus();
+    };
+  }, [open, onClose]);
+
   if (!open) return null;
 
   const live = !simulate;
@@ -69,6 +86,8 @@ export function StartBotModal({ open, onClose }: Props) {
     balanceLamports,
     solUsd,
   });
+  const walletMissing = !wallet.connected;
+  const canStart = !!wallet.connected && !gateError && confirmAck;
 
   async function start() {
     setBusy(true);
@@ -109,53 +128,79 @@ export function StartBotModal({ open, onClose }: Props) {
     }
   }
 
+  const balanceSol = balanceLamports != null ? balanceLamports / LAMPORTS_PER_SOL : null;
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      className="fixed inset-0 z-50 flex items-stretch justify-center overflow-hidden bg-black/70 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
+      aria-labelledby="start-bot-title"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
-      <div className="w-full max-w-lg overflow-hidden rounded border border-line bg-ink-900 shadow-2xl">
-        <div className="border-b border-line bg-ink-800 px-4 py-3">
-          <h2 className="font-mono text-sm tracking-wide text-neon">START AUTO-TRADE BOT</h2>
-          <p className="mt-0.5 text-[11px] text-mute">
-            Configure your run, then confirm. The bot will watch new launches and auto-buy scoring
-            candidates. It will not exceed any of the limits below.
-          </p>
+      <div className="flex w-full max-w-lg flex-col rounded-t-xl border border-line bg-ink-900 shadow-2xl sm:rounded-xl">
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line bg-ink-800 px-4 py-3">
+          <div>
+            <h2 id="start-bot-title" className="font-mono text-sm tracking-wide text-neon">
+              START AUTO-TRADE BOT
+            </h2>
+            <p className="mt-0.5 text-[11px] text-mute">
+              Configure your run, then confirm. The bot watches new launches and auto-buys scoring
+              candidates. It will not exceed any of the limits below.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="shrink-0 rounded border border-line px-2 py-1 font-mono text-xs text-mute hover:border-danger hover:text-danger"
+            aria-label="Close"
+          >
+            ✕
+          </button>
         </div>
 
-<div className="space-y-4 p-4">
-        <section className="rounded border border-line bg-ink-800 p-3">
-          <header className="flex items-center justify-between">
-            <h3 className="font-mono text-[11px] uppercase tracking-wide text-mute">
-              Wallet balance
-            </h3>
-            {solUsd != null ? (
-              <span className="font-mono text-[11px] text-mute">SOL ≈ ${solUsd.toFixed(2)}</span>
-            ) : (
-              <span className="font-mono text-[11px] text-mute">SOL price …</span>
-            )}
-          </header>
-          <p className="mt-1 font-mono text-base">
-            {balanceLamports == null
-              ? "—"
-              : `${(balanceLamports / LAMPORTS_PER_SOL).toFixed(4)} SOL`}
-            {balanceLamports != null && solUsd != null
-              ? ` ≈ $${((balanceLamports / LAMPORTS_PER_SOL) * solUsd).toFixed(2)}`
-              : null}
-          </p>
-          {gateError ? (
-            <p className="mt-2 rounded border border-danger/40 bg-danger/5 p-2 text-[11px] text-danger">
-              {gateError}
+        <div
+          ref={panelRef}
+          tabIndex={-1}
+          className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 scroll-thin"
+        >
+          <section className="rounded border border-line bg-ink-800 p-3">
+            <header className="flex items-center justify-between">
+              <h3 className="font-mono text-[11px] uppercase tracking-wide text-mute">
+                Wallet balance
+              </h3>
+              {solUsd != null ? (
+                <span className="font-mono text-[11px] text-mute">SOL ≈ ${solUsd.toFixed(2)}</span>
+              ) : (
+                <span className="font-mono text-[11px] text-mute">SOL price …</span>
+              )}
+            </header>
+            <p className="mt-1 break-all font-mono text-base">
+              {walletMissing ? (
+                <span className="text-warn">Wallet not connected — connect to start.</span>
+              ) : balanceSol == null ? (
+                "—"
+              ) : (
+                <>
+                  {balanceSol.toFixed(4)} SOL
+                  {solUsd != null ? ` ≈ $${(balanceSol * solUsd).toFixed(2)}` : null}
+                </>
+              )}
             </p>
-          ) : balanceLamports != null && solUsd != null ? (
-            <p className="mt-2 rounded border border-neon/40 bg-neon/5 p-2 text-[11px] text-neon">
-              Balance OK. Bot can start.
-            </p>
-          ) : null}
-        </section>
+            {gateError ? (
+              <p className="mt-2 rounded border border-danger/40 bg-danger/5 p-2 text-[11px] text-danger">
+                {gateError}
+              </p>
+            ) : balanceSol != null && solUsd != null && !walletMissing ? (
+              <p className="mt-2 rounded border border-neon/40 bg-neon/5 p-2 text-[11px] text-neon">
+                Balance OK. Bot can start.
+              </p>
+            ) : null}
+          </section>
 
-        <Section title="Run length">
+          <Section title="Run length">
             <div className="flex flex-wrap gap-2">
               {HOURS.map((h) => (
                 <button
@@ -178,7 +223,7 @@ export function StartBotModal({ open, onClose }: Props) {
           </Section>
 
           <Section title="Risk caps">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field
                 label="Max trades this run"
                 value={maxTrades}
@@ -280,7 +325,18 @@ export function StartBotModal({ open, onClose }: Props) {
           </label>
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-line bg-ink-800 px-4 py-3">
+        <div className="sticky bottom-0 flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-line bg-ink-800 px-4 py-3">
+          <p className="mr-auto max-w-[60%] font-mono text-[11px] text-mute">
+            {!wallet.connected
+              ? "Connect wallet to start."
+              : gateError
+                ? "Top up balance to start."
+                : !confirmAck
+                  ? "Tick the acknowledgement to enable start."
+                  : simulate
+                    ? "Paper trade. No SOL at risk."
+                    : "LIVE mainnet. Wallet will sign."}
+          </p>
           <button
             type="button"
             onClick={onClose}
@@ -291,16 +347,18 @@ export function StartBotModal({ open, onClose }: Props) {
           <button
             type="button"
             onClick={() => void start()}
-            disabled={busy || !confirmAck || !!gateError}
+            disabled={busy || !canStart}
             className="rounded bg-neon px-4 py-1.5 font-mono text-xs text-ink-950 disabled:opacity-40"
           >
-            {gateError
-              ? "BALANCE TOO LOW"
-              : busy
-                ? "Starting…"
-                : live
-                  ? "START LIVE BOT"
-                  : "START PAPER BOT"}
+            {busy
+              ? "Starting…"
+              : !wallet.connected
+                ? "CONNECT WALLET"
+                : gateError
+                  ? "BALANCE TOO LOW"
+                  : live
+                    ? "START LIVE BOT"
+                    : "START PAPER BOT"}
           </button>
         </div>
       </div>
