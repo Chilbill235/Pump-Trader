@@ -70,12 +70,13 @@ export function TradePanel(props: {
       ) {
         const lamports = solToLamports(amount);
         const bal = await connection.getBalance(wallet.publicKey, "confirmed");
-        const need = lamports.toNumber() + 50_000;
+        const buffer = 10_000_000; // 0.01 SOL: ATA rent + fees
+        const need = lamports.toNumber() + buffer;
         if (bal < need) {
           const have = (bal / 1e9).toFixed(4);
           const want = (need / 1e9).toFixed(4);
           throw new Error(
-            `Insufficient SOL: wallet has ${have} SOL, trade needs ~${want} SOL. Top up or lower the size.`,
+            `Insufficient SOL: wallet has ${have} SOL, trade needs ~${want} SOL (size + ~0.01 SOL for ATA rent + fees). Top up or lower the size.`,
           );
         }
       }

@@ -31,6 +31,39 @@ function str(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
 }
 
+const IPFS_HOSTS = [
+  "ipfs.io",
+  "gateway.pinata.cloud",
+  "cloudflare-ipfs.com",
+  "nftstorage.link",
+  "cf-ipfs.com",
+  "magenta.imaginative-banana.ts.net",
+  "dweb.link",
+];
+
+/** Rewrite a raw image URI to the app's own /api/img proxy so the browser never hits a cross-origin gateway. */
+export function proxifyImageUrl(src: string | null | undefined): string | undefined {
+  if (!src) return undefined;
+  if (src.startsWith("ipfs://")) {
+    return `/api/img?u=${encodeURIComponent(src)}`;
+  }
+  if (src.startsWith("ar://")) {
+    return `/api/img?u=${encodeURIComponent(src)}`;
+  }
+  if (src.startsWith("http://") || src.startsWith("https://")) {
+    try {
+      const u = new URL(src);
+      if (IPFS_HOSTS.some((h) => u.hostname === h || u.hostname.endsWith(`.${h}`))) {
+        return `/api/img?u=${encodeURIComponent(src)}`;
+      }
+    } catch {
+      return undefined;
+    }
+    return src;
+  }
+  return undefined;
+}
+
 export function normalizeCoin(raw: unknown): PumpCoin | null {
   const rec = asRecord(raw);
   if (!rec) return null;
@@ -46,11 +79,12 @@ export function normalizeCoin(raw: unknown): PumpCoin | null {
     symbol: str(rec.symbol) || str(rec.ticker) || "???",
     description: str(rec.description) ?? undefined,
     imageUri:
-      str(rec.image_uri) ||
-      str(rec.imageUri) ||
-      str(rec.image) ||
-      str(rec.thumbnail) ||
-      undefined,
+      proxifyImageUrl(
+        str(rec.image_uri) ||
+          str(rec.imageUri) ||
+          str(rec.image) ||
+          str(rec.thumbnail),
+      ),
     usdMarketCap: num(rec.usd_market_cap) ?? num(rec.usdMarketCap),
     marketCapSol: num(rec.market_cap) ?? num(rec.marketCap),
     complete: Boolean(rec.complete ?? rec.raydium_pool),

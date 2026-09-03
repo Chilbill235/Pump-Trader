@@ -324,12 +324,13 @@ export function WatchView() {
         throw new Error("Connect a Solana wallet first. This app never asks for a private key.");
       }
       const bal = await connection.getBalance(wallet.publicKey, "confirmed");
-      const need = solLamports.toNumber() + 50_000;
+      const buffer = 10_000_000; // 0.01 SOL: ATA rent + fees
+      const need = solLamports.toNumber() + buffer;
       if (bal < need) {
         const have = (bal / 1e9).toFixed(4);
         const want = (need / 1e9).toFixed(4);
         throw new Error(
-          `Insufficient SOL: wallet ${have} SOL, need ~${want} SOL for this trade.`,
+          `Insufficient SOL: wallet ${have} SOL, need ~${want} SOL (size + ~0.01 SOL for ATA rent + fees).`,
         );
       }
       const { receipt } = await simulateAndSend({

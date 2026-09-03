@@ -29,7 +29,12 @@ export function CoinImage({
     );
   }
 
-  const proxied = `/api/img?u=${encodeURIComponent(src)}`;
+  // pump-api normalizes IPFS gateway URLs to /api/img?u=... so the browser
+  // only ever hits the same-origin proxy. This avoids CORP/CORB blocks from
+  // ipfs.io (which sends Cross-Origin-Resource-Policy: same-origin).
+  const proxied = src.startsWith("/api/img?u=")
+    ? src
+    : `/api/img?u=${encodeURIComponent(src)}`;
 
   return (
     // eslint-disable-next-line @next/next/no-img-element
