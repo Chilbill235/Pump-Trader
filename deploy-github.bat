@@ -7,8 +7,8 @@ REM Usage: deploy-github.bat
 REM ============================================================
 
 set "REPO_DIR=C:\Users\kapon\Downloads\pump-trader"
-set "BRANCH=main"
-set "REMOTE=origin"
+set "BRANCH_NAME=main"
+set "REMOTE_NAME=origin"
 set "COMMIT_MSG=Update pump-trader"
 set "GH_REPO=https://github.com/Chilbill235/Pump-Trader"
 
@@ -42,14 +42,14 @@ if errorlevel 1 (
 )
 
 if defined GH_TOKEN (
-  for /f "delims=" %%R in ('git remote get-url %REMOTE%') do set "REMOTE_URL=%%R"
+  for /f "delims=" %%R in ('git remote get-url %REMOTE_NAME%') do set "REMOTE_URL=%%R"
   set "AUTH_URL=!REMOTE_URL:https://=https://%GH_TOKEN%@!"
-  echo === git push (token) %BRANCH% ===
-  git push "!AUTH_URL!" %BRANCH%
+  echo === git push (token) "%BRANCH_NAME%" ===
+  git push "!AUTH_URL!" "%BRANCH_NAME%"
   set "RC=%ERRORLEVEL%"
 ) else (
-  echo === git push %REMOTE% %BRANCH% ===
-  git push %REMOTE% %BRANCH%
+  echo === git push %REMOTE_NAME% "%BRANCH_NAME%" ===
+  git push "%REMOTE_NAME%" "%BRANCH_NAME%"
   set "RC=%ERRORLEVEL%"
 )
 
