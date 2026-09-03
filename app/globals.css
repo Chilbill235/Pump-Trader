@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  height: 100%;
+  background: #05060a;
+  color: #e8eaed;
+}
+
+body {
+  font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+}
+
+.wallet-adapter-button {
+  height: 34px !important;
+  font-size: 12px !important;
+  background: #141824 !important;
+  border: 1px solid #242a38 !important;
+  border-radius: 6px !important;
+}
+
+.wallet-adapter-button:hover {
+  background: #1c2230 !important;
+}
+
+.wallet-adapter-modal-wrapper {
+  background: #0d1017 !important;
+}
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.scroll-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: #242a38;
+  border-radius: 99px;
+}

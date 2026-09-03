@@ -1,0 +1,184 @@
+"use client";
+
+import { useConnection, useWallet } from "@solana/wallet-adapter-react";
+import BN from "bn.js";
+import { useEffect, useState } from "react";
+import { ALERTS_KEY, TPSL_FIRED_KEY } from "@/lib/constants";
+import { appendBotLog } from "@/lib/bot-log";
+import { loadPositions, pnlPct, upsertPositionFromFill } from "@/lib/positions";
+import { quoteTrade } from "@/lib/sdk";
+import { simulateAndSend } from "@/lib/trade";
+import type { AppAlert, Position } from "@/lib/types";
+import { useSettings } from "./SettingsProvider";
+
+function loadAlerts(): AppAlert[] {
+  try {
+    const raw = window.localStorage.getItem(ALERTS_KEY);
+    return raw ? (JSON.parse(raw) as AppAlert[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveAlerts(alerts: AppAlert[]): void {
+  window.localStorage.setItem(ALERTS_KEY, JSON.stringify(alerts.slice(0, 20)));
+}
+
+function loadFiredKeys(): Set<string> {
+  try {
+    const raw = window.localStorage.getItem(TPSL_FIRED_KEY);
+    if (!raw) return new Set();
+    return new Set(JSON.parse(raw) as string[]);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveFiredKeys(keys: Set<string>): void {
+  window.localStorage.setItem(
+    TPSL_FIRED_KEY,
+    JSON.stringify([...keys].slice(-100)),
+  );
+}
+
+export function TpSlWatcher() {
+  const { connection } = useConnection();
+  const wallet = useWallet();
+  const { settings } = useSettings();
+  const [banner, setBanner] = useState<AppAlert | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function tick() {
+      const positions = loadPositions().filter(
+        (p) => p.takeProfitPct != null || p.stopLossPct != null,
+      );
+      if (positions.length === 0) return;
+      for (const p of positions) {
+        if (cancelled) return;
+        await checkOne(p);
+      }
+    }
+
+    async function checkOne(p: Position) {
+      try {
+        const q = await quoteTrade({
+          connection,
+          mint: p.mint,
+          user: wallet.publicKey,
+          side: "sell",
+          tokenAmountRaw: new BN(p.tokenAmountRaw),
+          slippagePct: settings.slippagePct,
+        });
+        const pnl = pnlPct(new BN(p.costLamports), new BN(q.solLamports));
+        let kind: AppAlert["kind"] | null = null;
+        if (p.takeProfitPct != null && pnl >= p.takeProfitPct) kind = "take-profit";
+        else if (p.stopLossPct != null && pnl <= -Math.abs(p.stopLossPct)) kind = "stop-loss";
+        if (!kind) return;
+
+        const pnlBucket = kind === "take-profit" ? Math.floor(pnl) : Math.ceil(pnl);
+        const key = `${p.mint}:${kind}:${pnlBucket}`;
+        const fired = loadFiredKeys();
+        if (fired.has(key)) return;
+        fired.add(key);
+        saveFiredKeys(fired);
+
+        appendBotLog({
+          kind: kind === "take-profit" ? "tp_hit" : "sl_hit",
+          mint: p.mint,
+          symbol: p.symbol,
+          sizeSol: Number(new BN(p.costLamports).toString()) / 1e9,
+          pnlPct: pnl,
+          message: `${kind} (${pnl.toFixed(2)}%)`,
+        });
+        let autoSold = false;
+        const autoSellPaper = p.paper || settings.simulateMode;
+        if (settings.autoSell && wallet.publicKey && wallet.connected) {
+          try {
+            const { receipt } = await simulateAndSend({
+              connection,
+              wallet,
+              mint: p.mint,
+              side: "sell",
+              tokenAmountRaw: new BN(p.tokenAmountRaw),
+              slippagePct: settings.slippagePct,
+              paper: autoSellPaper,
+            });
+            upsertPositionFromFill({
+              mint: p.mint,
+              name: p.name,
+              symbol: p.symbol,
+              decimals: p.decimals,
+              side: "sell",
+              tokenAmountRaw: new BN(receipt.tokenAmountRaw),
+              solLamports: new BN(receipt.solLamports),
+              signature: receipt.signature,
+              paper: receipt.paper,
+            });
+            autoSold = true;
+            appendBotLog({
+              kind: receipt.paper ? "auto_sell_paper" : "auto_sell_live",
+              mint: p.mint,
+              symbol: p.symbol,
+              signature: receipt.signature ?? undefined,
+              sizeSol: Number(new BN(receipt.solLamports).toString()) / 1e9,
+              message: receipt.paper ? `paper auto-sell at ${pnl.toFixed(2)}%` : `live auto-sell at ${pnl.toFixed(2)}%`,
+            });
+          } catch (err) {
+            autoSold = false;
+            appendBotLog({
+              kind: "error",
+              mint: p.mint,
+              symbol: p.symbol,
+              message: `auto-sell failed: ${err instanceof Error ? err.message : String(err)}`,
+            });
+            console.error(`[TpSlWatcher] auto-sell failed for ${p.mint}:`, err);
+          }
+        }
+
+        const alert: AppAlert = {
+          id: key,
+          mint: p.mint,
+          symbol: p.symbol,
+          kind,
+          pnlPct: pnl,
+          at: Date.now(),
+          autoSold,
+          message: autoSold
+            ? `${p.symbol} ${kind} hit (${pnl.toFixed(1)}%). Auto-sell ${autoSellPaper ? "paper-filled" : "submitted"}.`
+            : `${p.symbol} ${kind} hit (${pnl.toFixed(1)}%). Auto-sell ${settings.autoSell ? "failed" : "is OFF"} — this is an alert only.`,
+        };
+        const next = [alert, ...loadAlerts()];
+        saveAlerts(next);
+        if (!cancelled) setBanner(alert);
+        if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+          new Notification("Pump trader alert", { body: alert.message });
+        }
+      } catch (err) {
+        console.error("[TpSlWatcher] checkOne error:", err);
+      }
+    }
+
+    void tick();
+    const id = setInterval(() => void tick(), 12_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [connection, wallet, settings.autoSell, settings.simulateMode, settings.slippagePct]);
+
+  if (!banner) return null;
+  return (
+    <div className="mb-3 flex items-start justify-between gap-3 rounded border border-warn/40 bg-warn/10 px-3 py-2 text-sm">
+      <p>{banner.message}</p>
+      <button
+        type="button"
+        className="font-mono text-[11px] text-mute"
+        onClick={() => setBanner(null)}
+      >
+        dismiss
+      </button>
+    </div>
+  );
+}
