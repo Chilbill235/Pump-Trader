@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useState } from "react";
 
 export function CoinImage({
@@ -30,24 +29,17 @@ export function CoinImage({
     );
   }
 
-  const isHttp = src.startsWith("http://") || src.startsWith("https://");
-  const isIpfsGateway =
-    isHttp &&
-    /(^|\.)(ipfs\.io|pinata\.cloud|cloudflare-ipfs\.com|nftstorage\.link|cf-ipfs\.com|magenta\.imaginative-banana\.ts\.net|dweb\.link|ipfs\.sloppyta\.com)\//i.test(
-      src,
-    );
-  const proxied =
-    isHttp && !isIpfsGateway
-      ? src
-      : `/api/img?u=${encodeURIComponent(src)}`;
+  const proxied = `/api/img?u=${encodeURIComponent(src)}`;
 
   return (
-    <Image
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
       src={proxied}
       alt={alt}
       width={size}
       height={size}
-      unoptimized
+      loading="lazy"
+      decoding="async"
       className={`shrink-0 rounded object-cover ${className ?? ""}`}
       style={{ width: size, height: size }}
       onError={() => setErrored(true)}

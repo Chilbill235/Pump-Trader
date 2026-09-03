@@ -46,6 +46,8 @@ export async function GET(req: NextRequest) {
         headers: {
           "Content-Type": ct,
           "Cache-Control": "public, max-age=300, s-maxage=300",
+          "Cross-Origin-Resource-Policy": "cross-origin",
+          "Access-Control-Allow-Origin": "*",
           "X-Img-Source": url,
         },
       });

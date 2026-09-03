@@ -63,6 +63,22 @@ export function TradePanel(props: {
     setBusy(true);
     setError(null);
     try {
+      if (
+        side === "buy" &&
+        !settings.simulateMode &&
+        wallet.publicKey
+      ) {
+        const lamports = solToLamports(amount);
+        const bal = await connection.getBalance(wallet.publicKey, "confirmed");
+        const need = lamports.toNumber() + 50_000;
+        if (bal < need) {
+          const have = (bal / 1e9).toFixed(4);
+          const want = (need / 1e9).toFixed(4);
+          throw new Error(
+            `Insufficient SOL: wallet has ${have} SOL, trade needs ~${want} SOL. Top up or lower the size.`,
+          );
+        }
+      }
       const { receipt, quote: filled } = await simulateAndSend({
         connection,
         wallet,

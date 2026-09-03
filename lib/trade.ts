@@ -82,6 +82,20 @@ export async function simulateAndSend(args: {
     throw new Error("Coin graduated after quote. Pipeline will not buy.");
   }
 
+  // Pre-flight balance check so we never try to sign an obviously-underfunded tx.
+  if (args.side === "buy") {
+    const lamports = args.solLamports?.toNumber() ?? 0;
+    const bufferLamports = 50_000; // rent + tx fee buffer
+    const bal = await args.connection.getBalance(user);
+    if (bal < lamports + bufferLamports) {
+      const have = (bal / 1e9).toFixed(4);
+      const need = ((lamports + bufferLamports) / 1e9).toFixed(4);
+      throw new Error(
+        `Insufficient SOL: wallet has ${have} SOL, trade needs ~${need} SOL (size + fees). Top up the wallet or lower the per-coin cap.`,
+      );
+    }
+  }
+
   const { ixs } = await buildTradeInstructions({
     connection: args.connection,
     mint: args.mint,

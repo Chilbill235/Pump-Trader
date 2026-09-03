@@ -10,6 +10,7 @@ import { CopyButton } from "./CopyButton";
 import { useSettings } from "./SettingsProvider";
 import { SOLSCAN_TX, TOKEN_DECIMALS } from "@/lib/constants";
 import { appendBotLog } from "@/lib/bot-log";
+import { evaluateBankroll, loadBankrollConfig } from "@/lib/bankroll";
 import { shortenAddress, solToLamports, timeAgo } from "@/lib/format";
 import {
   appendPipelineLog,
@@ -217,6 +218,36 @@ export function WatchView() {
       const solLamports = solToLamports(String(candidate.sizeSol));
       if (solLamports.lten(0)) throw new Error("Buy size is 0.");
 
+      // Bankroll protection: stop the bot if equity / drawdown / session loss are breached.
+      const cfg = loadBankrollConfig();
+      if (cfg.enabled && settings.autoTrade) {
+        const bankrollSol = wallet.publicKey
+          ? (await connection.getBalance(wallet.publicKey, "confirmed")) / 1e9
+          : 0;
+        const closedTrades = (() => {
+          try {
+            const raw = window.localStorage.getItem("pump-trader:closed-trades:v1");
+            return raw ? (JSON.parse(raw) as { pnlSol: number }[]) : [];
+          } catch {
+            return [];
+          }
+        })();
+        const realizedLoss = Math.max(
+          0,
+          closedTrades.filter((t) => t.pnlSol < 0).reduce((s, t) => s + t.pnlSol, 0) * -1,
+        );
+        const result = evaluateBankroll({
+          bankrollSol,
+          positionsValueSol: 0,
+          realizedLossSessionSol: realizedLoss,
+          cfg,
+        });
+        if (result.killSwitch && result.killSwitchReason) {
+          appendBotLog({ kind: "error", message: `KILL SWITCH: ${result.killSwitchReason}` });
+          throw new Error(result.killSwitchReason);
+        }
+      }
+
       const preQuote = await quoteTrade({
         connection,
         mint: candidate.mint,
@@ -291,6 +322,15 @@ export function WatchView() {
 
       if (!wallet.publicKey) {
         throw new Error("Connect a Solana wallet first. This app never asks for a private key.");
+      }
+      const bal = await connection.getBalance(wallet.publicKey, "confirmed");
+      const need = solLamports.toNumber() + 50_000;
+      if (bal < need) {
+        const have = (bal / 1e9).toFixed(4);
+        const want = (need / 1e9).toFixed(4);
+        throw new Error(
+          `Insufficient SOL: wallet ${have} SOL, need ~${want} SOL for this trade.`,
+        );
       }
       const { receipt } = await simulateAndSend({
         connection,
