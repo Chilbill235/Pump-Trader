@@ -95,6 +95,32 @@ export async function fetchCoinOnchain(
   };
 }
 
+/**
+ * Wrap any pump-sdk deserialization failure ("Trying to access beyond buffer length"
+ * etc.) into a user-friendly hint that this mint probably isn't a pump.fun coin.
+ */
+export function isLikelyNotPumpCoin(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return (
+    /beyond buffer length/i.test(msg) ||
+    /out of range/i.test(msg) ||
+    /expected.{0,30}length/i.test(msg) ||
+    /deserialize/i.test(msg) ||
+    /invalid account data/i.test(msg) ||
+    /Account not found/i.test(msg)
+  );
+}
+
+export function friendlyOnchainError(err: unknown, mint: string): string {
+  if (isLikelyNotPumpCoin(err)) {
+    return (
+      `This mint (${mint.slice(0, 4)}…${mint.slice(-4)}) does not look like a pump.fun bonding-curve token. ` +
+      `Double-check the address. Graduated (pump-amm) coins use the AMM endpoint, not the bonding-curve one.`
+    );
+  }
+  return err instanceof Error ? err.message : String(err);
+}
+
 export async function quoteTrade(args: {
   connection: Connection;
   mint: string;

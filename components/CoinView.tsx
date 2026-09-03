@@ -5,7 +5,7 @@ import BN from "bn.js";
 import { useEffect, useState } from "react";
 import { PUMP_FUN_COIN, SOLSCAN_TOKEN } from "@/lib/constants";
 import { compactNumber, formatUsd, lamportsToSol, shortenAddress } from "@/lib/format";
-import { fetchCoinOnchain } from "@/lib/sdk";
+import { friendlyOnchainError, fetchCoinOnchain } from "@/lib/sdk";
 import type { CoinOnchain, PumpCoin } from "@/lib/types";
 import { CoinImage } from "./CoinImage";
 import { CopyButton } from "./CopyButton";
@@ -57,7 +57,7 @@ export function CoinView({ mint }: { mint: string }) {
       .catch((err: unknown) => {
         if (!cancelled) {
           setOnchain(null);
-          setOnchainErr(err instanceof Error ? err.message : String(err));
+          setOnchainErr(friendlyOnchainError(err, mint));
         }
       });
     const id = setInterval(() => {
@@ -68,7 +68,9 @@ export function CoinView({ mint }: { mint: string }) {
             setOnchainErr(null);
           }
         })
-        .catch(() => undefined);
+        .catch((err: unknown) => {
+          if (!cancelled) setOnchainErr(friendlyOnchainError(err, mint));
+        });
     }, 12_000);
     return () => {
       cancelled = true;

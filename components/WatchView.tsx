@@ -11,6 +11,11 @@ import { useSettings } from "./SettingsProvider";
 import { SOLSCAN_TX, TOKEN_DECIMALS } from "@/lib/constants";
 import { appendBotLog } from "@/lib/bot-log";
 import { evaluateBankroll, loadBankrollConfig } from "@/lib/bankroll";
+import {
+  MIN_BUY_SOL,
+  MIN_SOL_RESERVED_FOR_FEES,
+  validateBuyAmount,
+} from "@/lib/trade-limits";
 import { shortenAddress, solToLamports, timeAgo } from "@/lib/format";
 import {
   appendPipelineLog,
@@ -215,7 +220,18 @@ export function WatchView() {
     setActionError(null);
     setReceiptNote(null);
     try {
-      const solLamports = solToLamports(String(candidate.sizeSol));
+      const validated = validateBuyAmount(String(candidate.sizeSol));
+      if (!validated.ok || !validated.lamports) {
+        throw new Error(
+          validated.error ?? `Invalid buy size ${candidate.sizeSol} SOL.`,
+        );
+      }
+      if (Number(candidate.sizeSol) < MIN_BUY_SOL) {
+        throw new Error(
+          `Candidate size ${candidate.sizeSol} SOL is below pump.fun minimum ${MIN_BUY_SOL} SOL. Raise max_position_sol in Settings.`,
+        );
+      }
+      const solLamports = validated.lamports;
       if (solLamports.lten(0)) throw new Error("Buy size is 0.");
 
       // Bankroll protection: stop the bot if equity / drawdown / session loss are breached.
@@ -324,13 +340,13 @@ export function WatchView() {
         throw new Error("Connect a Solana wallet first. This app never asks for a private key.");
       }
       const bal = await connection.getBalance(wallet.publicKey, "confirmed");
-      const buffer = 10_000_000; // 0.01 SOL: ATA rent + fees
-      const need = solLamports.toNumber() + buffer;
+      const bufferLamports = Math.round(MIN_SOL_RESERVED_FOR_FEES * 1e9);
+      const need = solLamports.toNumber() + bufferLamports;
       if (bal < need) {
         const have = (bal / 1e9).toFixed(4);
         const want = (need / 1e9).toFixed(4);
         throw new Error(
-          `Insufficient SOL: wallet ${have} SOL, need ~${want} SOL (size + ~0.01 SOL for ATA rent + fees).`,
+          `Insufficient SOL: wallet ${have} SOL, need ~${want} SOL (size + ~${MIN_SOL_RESERVED_FOR_FEES} SOL for ATA rent + fees).`,
         );
       }
       const { receipt } = await simulateAndSend({

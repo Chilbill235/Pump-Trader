@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useConnection, useWallet } from "@solana/wallet-adapter-react";
+import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { appendBotLog } from "@/lib/bot-log";
 import { useSettings } from "./SettingsProvider";
+import { validateBotStart } from "@/lib/trade-limits";
 
 type Props = {
   open: boolean;
@@ -13,6 +16,8 @@ const HOURS = [1, 4, 8, 24];
 
 export function StartBotModal({ open, onClose }: Props) {
   const { settings, update } = useSettings();
+  const wallet = useWallet();
+  const { connection } = useConnection();
   const [durationH, setDurationH] = useState<number>(4);
   const [maxTrades, setMaxTrades] = useState<number>(10);
   const [perCoinCapSol, setPerCoinCapSol] = useState<number>(settings.maxPositionSol);
@@ -24,10 +29,42 @@ export function StartBotModal({ open, onClose }: Props) {
   const [simulate, setSimulate] = useState<boolean>(settings.simulateMode);
   const [confirmAck, setConfirmAck] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [balanceLamports, setBalanceLamports] = useState<number | null>(null);
+  const [solUsd, setSolUsd] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!open || ! wallet.publicKey) {
+      setBalanceLamports(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const lamports = await connection.getBalance(wallet.publicKey!, "confirmed");
+        if (!cancelled) setBalanceLamports(lamports);
+      } catch {
+        if (!cancelled) setBalanceLamports(null);
+      }
+    })();
+    fetch("/api/sol-price", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j: { usd?: number | null }) => {
+        if (!cancelled) setSolUsd(j.usd ?? null);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [open, wallet.publicKey, connection]);
 
   if (!open) return null;
 
   const live = !simulate;
+  const gateError = validateBotStart({
+    walletConnected: wallet.connected,
+    balanceLamports,
+    solUsd,
+  });
 
   async function start() {
     setBusy(true);
@@ -86,8 +123,38 @@ export function StartBotModal({ open, onClose }: Props) {
           </p>
         </div>
 
-        <div className="space-y-4 p-4">
-          <Section title="Run length">
+<div className="space-y-4 p-4">
+        <section className="rounded border border-line bg-ink-800 p-3">
+          <header className="flex items-center justify-between">
+            <h3 className="font-mono text-[11px] uppercase tracking-wide text-mute">
+              Wallet balance
+            </h3>
+            {solUsd != null ? (
+              <span className="font-mono text-[11px] text-mute">SOL ≈ ${solUsd.toFixed(2)}</span>
+            ) : (
+              <span className="font-mono text-[11px] text-mute">SOL price …</span>
+            )}
+          </header>
+          <p className="mt-1 font-mono text-base">
+            {balanceLamports == null
+              ? "—"
+              : `${(balanceLamports / LAMPORTS_PER_SOL).toFixed(4)} SOL`}
+            {balanceLamports != null && solUsd != null
+              ? ` ≈ $${((balanceLamports / LAMPORTS_PER_SOL) * solUsd).toFixed(2)}`
+              : null}
+          </p>
+          {gateError ? (
+            <p className="mt-2 rounded border border-danger/40 bg-danger/5 p-2 text-[11px] text-danger">
+              {gateError}
+            </p>
+          ) : balanceLamports != null && solUsd != null ? (
+            <p className="mt-2 rounded border border-neon/40 bg-neon/5 p-2 text-[11px] text-neon">
+              Balance OK. Bot can start.
+            </p>
+          ) : null}
+        </section>
+
+        <Section title="Run length">
             <div className="flex flex-wrap gap-2">
               {HOURS.map((h) => (
                 <button
@@ -223,10 +290,16 @@ export function StartBotModal({ open, onClose }: Props) {
           <button
             type="button"
             onClick={() => void start()}
-            disabled={busy || !confirmAck}
+            disabled={busy || !confirmAck || !!gateError}
             className="rounded bg-neon px-4 py-1.5 font-mono text-xs text-ink-950 disabled:opacity-40"
           >
-            {busy ? "Starting…" : live ? "START LIVE BOT" : "START PAPER BOT"}
+            {gateError
+              ? "BALANCE TOO LOW"
+              : busy
+                ? "Starting…"
+                : live
+                  ? "START LIVE BOT"
+                  : "START PAPER BOT"}
           </button>
         </div>
       </div>

@@ -8,6 +8,12 @@ import { lamportsToSol, solToLamports, tokensToUi, uiToTokens } from "@/lib/form
 import { upsertPositionFromFill } from "@/lib/positions";
 import { quoteTrade } from "@/lib/sdk";
 import { simulateAndSend } from "@/lib/trade";
+import {
+  MIN_BUY_SOL,
+  MIN_SOL_RESERVED_FOR_FEES,
+  validateBuyAmount,
+  validateSellAmount,
+} from "@/lib/trade-limits";
 import type { QuoteResult, TradeSide } from "@/lib/types";
 import { useSettings } from "./SettingsProvider";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -32,8 +38,18 @@ export function TradePanel(props: {
   const [receiptNote, setReceiptNote] = useState<string | null>(null);
 
   function parsedAmounts(): { solLamports?: BN; tokenAmountRaw?: BN } {
-    if (side === "buy") return { solLamports: solToLamports(amount) };
-    return { tokenAmountRaw: uiToTokens(amount, decimals) };
+    if (side === "buy") {
+      const v = validateBuyAmount(amount);
+      if (!v.ok || !v.lamports) {
+        throw new Error(v.error ?? "Invalid SOL amount.");
+      }
+      return { solLamports: v.lamports };
+    }
+    const v = validateSellAmount(amount, decimals);
+    if (!v.ok || !v.raw) {
+      throw new Error(v.error ?? "Invalid token amount.");
+    }
+    return { tokenAmountRaw: v.raw };
   }
 
   async function runQuote() {
@@ -42,13 +58,14 @@ export function TradePanel(props: {
     setReceiptUrl(null);
     setReceiptNote(null);
     try {
+      const parsed = parsedAmounts();
       const q = await quoteTrade({
         connection,
         mint: props.mint,
         user: wallet.publicKey,
         side,
         slippagePct: settings.slippagePct,
-        ...parsedAmounts(),
+        ...parsed,
       });
       setQuote(q);
     } catch (err) {
@@ -63,20 +80,21 @@ export function TradePanel(props: {
     setBusy(true);
     setError(null);
     try {
+      const parsed = parsedAmounts();
       if (
         side === "buy" &&
         !settings.simulateMode &&
         wallet.publicKey
       ) {
-        const lamports = solToLamports(amount);
+        const lamports = parsed.solLamports!;
         const bal = await connection.getBalance(wallet.publicKey, "confirmed");
-        const buffer = 10_000_000; // 0.01 SOL: ATA rent + fees
-        const need = lamports.toNumber() + buffer;
+        const bufferLamports = Math.round(MIN_SOL_RESERVED_FOR_FEES * 1e9);
+        const need = lamports.toNumber() + bufferLamports;
         if (bal < need) {
           const have = (bal / 1e9).toFixed(4);
           const want = (need / 1e9).toFixed(4);
           throw new Error(
-            `Insufficient SOL: wallet has ${have} SOL, trade needs ~${want} SOL (size + ~0.01 SOL for ATA rent + fees). Top up or lower the size.`,
+            `Insufficient SOL: wallet has ${have} SOL, trade needs ~${want} SOL (size + ~${MIN_SOL_RESERVED_FOR_FEES} SOL for ATA rent + fees). Top up or lower the size.`,
           );
         }
       }
@@ -87,7 +105,7 @@ export function TradePanel(props: {
         side,
         slippagePct: settings.slippagePct,
         paper: settings.simulateMode,
-        ...parsedAmounts(),
+        ...parsed,
       });
       setQuote(filled);
       upsertPositionFromFill({
