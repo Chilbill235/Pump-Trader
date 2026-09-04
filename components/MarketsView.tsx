@@ -229,6 +229,7 @@ export function MarketsView() {
                       <th className="hidden px-3 py-2.5 text-right md:table-cell">MC SOL</th>
                       <th className="px-3 py-2.5">Status</th>
                       <th className="hidden px-3 py-2.5 md:table-cell">Last</th>
+                      <th className="px-2 py-2.5 text-right"><span className="sr-only">Trade</span></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -286,6 +287,24 @@ export function MarketsView() {
                               : c.createdAt
                                 ? timeAgo(c.createdAt)
                                 : "—"}
+                          </td>
+                          <td className="px-2 py-2.5 text-right">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveMint(c.mint);
+                              }}
+                              className={`press inline-flex h-8 items-center gap-1 rounded-md border px-2.5 font-mono text-[11px] font-semibold transition-colors ${
+                                active
+                                  ? "border-neon/60 bg-neon/15 text-neon"
+                                  : "border-line bg-ink-850 text-mute hover:border-neon hover:bg-neon/10 hover:text-neon"
+                              }`}
+                              aria-label={`Trade ${c.name} (${c.symbol})`}
+                            >
+                              Trade
+                              <span aria-hidden>›</span>
+                            </button>
                           </td>
                         </tr>
                       );

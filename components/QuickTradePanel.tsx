@@ -238,6 +238,7 @@ export function QuickTradePanel(props: Props) {
   const [inMint, setInMint] = useState<string>(SOL_MINT);
   const [inDecimals, setInDecimals] = useState<number>(9);
   const [inBalance, setInBalance] = useState<number | null>(null);
+  const [showTokenPicker, setShowTokenPicker] = useState(false);
 
   const inputOptions = useMemo(() => {
     const opts: Array<{ mint: string; symbol: string; balance: number | null }> = [
@@ -737,6 +738,41 @@ export function QuickTradePanel(props: Props) {
         ? "pump-amm"
         : "pump.fun bonding curve";
 
+  // Find the holding for the current token we're selling (sell side).
+  const holdingTokenAmount = useMemo(() => {
+    if (side !== "sell") return null;
+    const h = (props.holdings ?? []).find((x) => x.mint === props.mint);
+    if (!h || !Number.isFinite(h.amount)) return null;
+    return Number(tokensToUi(new BN(Math.round(h.amount)), h.decimals));
+  }, [side, props.holdings, props.mint]);
+
+  // Live insufficient-balance check so the user never has to submit to find
+  // out they don't have enough. Covers both SOL-input buys and sell amounts.
+  const insufficientBalance = useMemo(() => {
+    if (!isValidAmount) return false;
+    if (side === "buy" && inBalance != null) {
+      if (inMint === SOL_MINT) {
+        // Wallet needs to cover the spend + rent + fees.
+        const available = (walletData.sol ?? 0) - MIN_SOL_RESERVED_FOR_FEES;
+        if (amountUi > Math.max(0, available)) return true;
+      } else {
+        if (amountUi > inBalance) return true;
+      }
+    }
+    if (side === "sell" && holdingTokenAmount != null && amountUi > holdingTokenAmount) {
+      return true;
+    }
+    return false;
+  }, [
+    isValidAmount,
+    side,
+    inBalance,
+    inMint,
+    amountUi,
+    holdingTokenAmount,
+    walletData.sol,
+  ]);
+
   return (
     <div className="relative overflow-hidden rounded-xl border border-line glass">
       <div
@@ -816,24 +852,59 @@ export function QuickTradePanel(props: Props) {
         </button>
       </div>
 
-      <label className="mb-1 block font-mono text-[10px] uppercase tracking-widest text-mute">
-        {side === "buy" ? "Spend (SOL)" : `Sell amount (${symbol})`}
-      </label>
-      <div className="mb-1 flex gap-2">
-        <input
-          value={amount}
-          onChange={(e) => {
-            setAmount(e.target.value);
-            setQuote(null);
-            setErrorInfo(null);
-          }}
-          inputMode="decimal"
-          placeholder={side === "buy" ? "0.0" : "amount of token"}
-          className="min-w-0 flex-1 rounded-md border border-line bg-ink-850 px-3 py-2.5 font-mono text-base outline-none focus:border-neon focus:bg-ink-900 sm:text-sm"
-        />
+      {/* Spend input */}
+      <div className="mb-2">
+        <div className="mb-1.5 flex items-center justify-between">
+          <span className="font-mono text-[10px] uppercase tracking-widest text-mute">
+            {side === "buy" ? "You pay" : "You sell"}
+          </span>
+          {side === "buy" && inBalance != null ? (
+            <span className="font-mono text-[11px] text-mute">
+              Balance:{" "}
+              <span className={`text-white ${inBalance <= 0 ? "text-danger" : ""}`}>
+                {inBalance.toLocaleString(undefined, { maximumFractionDigits: 6 })} {inSymbol}
+              </span>
+            </span>
+          ) : side === "sell" ? (
+            <span className="font-mono text-[11px] text-mute">
+              {holdingTokenAmount != null ? (
+                <>
+                  Holding:{" "}
+                  <span className="text-white">
+                    {holdingTokenAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })}{" "}
+                    {symbol}
+                  </span>
+                </>
+              ) : null}
+            </span>
+          ) : null}
+        </div>
+        <div className="flex gap-2">
+          <input
+            value={amount}
+            onChange={(e) => {
+              setAmount(e.target.value);
+              setQuote(null);
+              setErrorInfo(null);
+            }}
+            inputMode="decimal"
+            placeholder={side === "buy" ? "0.0" : "amount of token"}
+            aria-label={side === "buy" ? `Amount of ${inSymbol} to spend` : `Amount of ${symbol} to sell`}
+            className={`min-w-0 flex-1 rounded-md border bg-ink-850 px-3 py-2.5 font-mono text-base outline-none focus:bg-ink-900 sm:text-sm ${
+              insufficientBalance
+                ? "border-danger/60 focus:border-danger"
+                : "border-line focus:border-neon"
+            }`}
+          />
+          <div className="flex shrink-0 items-center rounded-md border border-line bg-ink-850 px-2.5 font-mono text-xs font-semibold text-mute">
+            {side === "buy" ? inSymbol : symbol}
+          </div>
+        </div>
       </div>
+
+      {/* Quick presets */}
       {side === "buy" ? (
-        <div className="mb-2 flex flex-wrap items-center gap-1">
+        <div className="mb-3 flex flex-wrap items-center gap-1.5">
           {["0.001", "0.01", "0.05", "0.1", "0.5", "1"].map((preset) => (
             <button
               key={preset}
@@ -843,10 +914,10 @@ export function QuickTradePanel(props: Props) {
                 setQuote(null);
                 setErrorInfo(null);
               }}
-              className={`press inline-flex min-h-[36px] items-center rounded-md border px-2.5 py-1.5 font-mono text-xs hover:border-neon hover:text-neon focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon ${
+              className={`press inline-flex min-h-[32px] items-center rounded-md border px-2.5 py-1 font-mono text-[11px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon ${
                 amount === preset
                   ? "border-neon/50 bg-neon/10 text-neon"
-                  : "border-line bg-ink-850 text-mute"
+                  : "border-line bg-ink-850 text-mute hover:border-neon/50 hover:text-neon"
               }`}
             >
               {preset}
@@ -862,90 +933,242 @@ export function QuickTradePanel(props: Props) {
                 setQuote(null);
                 setErrorInfo(null);
               }}
-              className="press ml-auto inline-flex min-h-[36px] items-center rounded-md border border-warn/40 bg-warn/10 px-2.5 py-1.5 font-mono text-xs text-warn hover:border-warn hover:bg-warn/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warn"
+              className="press ml-auto inline-flex min-h-[32px] items-center rounded-md border border-warn/40 bg-warn/10 px-2.5 py-1 font-mono text-[11px] text-warn hover:border-warn hover:bg-warn/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warn"
               title="Use entire balance minus fees"
             >
               MAX
             </button>
           ) : null}
         </div>
-      ) : null}
-      {amountUsd != null ? (
-        <p className="mb-2 font-mono text-[11px] text-mute">
+      ) : (
+        <div className="mb-3 flex flex-wrap items-center gap-1.5">
+          {["25%", "50%", "75%", "100%"].map((pct) => {
+            const fraction = parseInt(pct, 10) / 100;
+            const v =
+              holdingTokenAmount != null ? (holdingTokenAmount * fraction).toString() : "0";
+            return (
+              <button
+                key={pct}
+                type="button"
+                onClick={() => {
+                  setAmount(v);
+                  setQuote(null);
+                  setErrorInfo(null);
+                }}
+                className="press inline-flex min-h-[32px] items-center rounded-md border border-line bg-ink-850 px-2.5 py-1 font-mono text-[11px] text-mute hover:border-neon hover:text-neon focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon"
+              >
+                {pct}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Inline insufficient balance / validation message */}
+      {insufficientBalance ? (
+        <div
+          role="alert"
+          className="mb-3 flex items-start gap-2 rounded-md border border-danger/40 bg-danger/5 p-2.5 text-[11px] text-danger"
+        >
+          <svg
+            aria-hidden
+            width="14"
+            height="14"
+            viewBox="0 0 14 14"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            className="mt-0.5 shrink-0"
+          >
+            <circle cx="7" cy="7" r="6" />
+            <path d="M7 4v3.5" strokeLinecap="round" />
+            <circle cx="7" cy="9.6" r="0.6" fill="currentColor" />
+          </svg>
+          <div className="min-w-0 flex-1">
+            <p className="font-mono font-semibold">
+              Not enough {side === "buy" ? inSymbol : symbol}
+            </p>
+            <p className="mt-0.5 font-mono text-mute">
+              {side === "buy" ? (
+                <>
+                  You have{" "}
+                  <span className="text-white">
+                    {inBalance?.toLocaleString(undefined, { maximumFractionDigits: 6 })}{" "}
+                    {inSymbol}
+                  </span>
+                  {inMint === SOL_MINT ? (
+                    <>
+                      {" "}— top up or pick a smaller size. {MIN_SOL_RESERVED_FOR_FEES.toFixed(3)} SOL
+                      is reserved for rent + fees.
+                    </>
+                  ) : (
+                    <> — pick a smaller size or use a different input token.</>
+                  )}
+                </>
+              ) : (
+                <>You don&apos;t hold enough {symbol} to sell this amount.</>
+              )}
+            </p>
+          </div>
+        </div>
+      ) : amountUsd != null && amountUsd > 0 ? (
+        <p className="mb-3 font-mono text-[11px] text-mute">
           ≈ <span className="text-info">${amountUsd.toFixed(2)}</span> USD
         </p>
       ) : (
-        <div className="mb-2" />
+        <div className="mb-3" />
       )}
 
+      {/* Pay-with / Receive picker (only for buys) */}
       {side === "buy" ? (
-        <label className="mb-3 block">
-          <span className="mb-1 block font-mono text-[10px] uppercase tracking-widest text-mute">
-            Pay with
-          </span>
-          <select
-            value={inMint}
-            onChange={(e) => {
-              setInMint(e.target.value);
-              setQuote(null);
-              setErrorInfo(null);
-              if (e.target.value !== SOL_MINT) {
-                setPumpSupported(false);
-              }
-            }}
-            className="w-full rounded-md border border-line bg-ink-850 px-3 py-2 font-mono text-sm focus:border-neon focus:outline-none"
+        <div className="mb-3">
+          <div className="mb-1.5 flex items-center justify-between">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-mute">
+              Pay with
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowTokenPicker((v) => !v)}
+              className="press rounded font-mono text-[11px] text-mute hover:text-neon"
+              aria-expanded={showTokenPicker}
+              aria-controls="pay-with-list"
+            >
+              {showTokenPicker ? "hide" : `change (${inputOptions.length - 1})`}
+            </button>
+          </div>
+          {/* Selected token pill */}
+          <button
+            type="button"
+            onClick={() => setShowTokenPicker((v) => !v)}
+            className="press flex w-full items-center justify-between gap-2 rounded-md border border-line bg-ink-850 px-2.5 py-2 text-left hover:border-neon/50"
           >
-            {inputOptions.map((o) => (
-              <option key={o.mint} value={o.mint}>
-                {o.symbol} · {shortenAddress(o.mint, 4, 4)}
-              </option>
-            ))}
-          </select>
-          {inBalance != null ? (
-            <p className="mt-1 font-mono text-[11px] text-mute">
-              Balance:{" "}
-              <span className="text-zinc-200">
-                {inBalance.toLocaleString(undefined, { maximumFractionDigits: 6 })} {inSymbol}
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-line bg-ink-900 font-mono text-[10px] font-bold text-white">
+                {inSymbol.slice(0, 1)}
               </span>
-            </p>
+              <span className="min-w-0">
+                <span className="block truncate font-mono text-sm font-semibold text-white">
+                  {inSymbol}
+                </span>
+                <span className="block truncate font-mono text-[10px] text-mute">
+                  {shortenAddress(inMint, 4, 4)}
+                </span>
+              </span>
+            </span>
+            <span className="text-right font-mono text-[11px]">
+              {inBalance != null ? (
+                <>
+                  <span className={inBalance <= 0 ? "text-danger" : "text-white"}>
+                    {inBalance.toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                  </span>
+                  <span className="block text-[10px] text-mute">balance</span>
+                </>
+              ) : (
+                <span className="text-mute">—</span>
+              )}
+            </span>
+          </button>
+
+          {/* Token picker list */}
+          {showTokenPicker ? (
+            <ul
+              id="pay-with-list"
+              className="mt-2 max-h-56 space-y-1 overflow-y-auto rounded-md border border-line bg-ink-900 p-1.5 scroll-thin"
+            >
+              {inputOptions.map((o) => {
+                const active = o.mint === inMint;
+                const isSol = o.mint === SOL_MINT;
+                return (
+                  <li key={o.mint}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInMint(o.mint);
+                        setQuote(null);
+                        setErrorInfo(null);
+                        if (o.mint !== SOL_MINT) setPumpSupported(false);
+                        setShowTokenPicker(false);
+                      }}
+                      className={`press flex w-full items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-left transition-colors ${
+                        active
+                          ? "border-neon/50 bg-neon/10"
+                          : "border-transparent bg-ink-850 hover:border-line hover:bg-ink-800"
+                      }`}
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span
+                          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-mono text-[11px] font-bold ${
+                            active
+                              ? "bg-neon text-ink-950"
+                              : "border border-line bg-ink-900 text-white"
+                          }`}
+                        >
+                          {o.symbol.slice(0, 1)}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="flex items-center gap-1.5">
+                            <span
+                              className={`truncate font-mono text-sm font-semibold ${
+                                active ? "text-neon" : "text-white"
+                              }`}
+                            >
+                              {o.symbol}
+                            </span>
+                            {isSol ? (
+                              <span className="rounded border border-neon/30 bg-neon/5 px-1 font-mono text-[9px] uppercase text-neon">
+                                native
+                              </span>
+                            ) : null}
+                          </span>
+                          <span className="block truncate font-mono text-[10px] text-mute">
+                            {shortenAddress(o.mint, 4, 4)}
+                          </span>
+                        </span>
+                      </span>
+                      <span className="text-right font-mono text-[11px]">
+                        {o.balance != null ? (
+                          <>
+                            <span className={o.balance <= 0 ? "text-mute" : "text-white"}>
+                              {o.balance.toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                            </span>
+                            <span className="block text-[10px] text-mute">balance</span>
+                          </>
+                        ) : isSol && walletData.sol != null ? (
+                          <>
+                            <span className="text-white">
+                              {walletData.sol.toFixed(4)}
+                            </span>
+                            <span className="block text-[10px] text-mute">balance</span>
+                          </>
+                        ) : (
+                          <span className="text-mute">—</span>
+                        )}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
           ) : null}
+
+          {/* Routing hint */}
           {inMint !== SOL_MINT ? (
-            <p className="mt-1 rounded-md border border-warn/30 bg-warn/5 px-2 py-1 font-mono text-[11px] text-warn">
-              Will route through Jupiter. The pump program only accepts SOL.
+            <p className="mt-2 flex items-start gap-1.5 rounded-md border border-warn/30 bg-warn/5 px-2 py-1.5 font-mono text-[11px] text-warn">
+              <span aria-hidden>↪</span>
+              <span>Routes through Jupiter. The pump program only accepts SOL.</span>
             </p>
           ) : pumpSupported === false ? (
-            <p className="mt-1 rounded-md border border-warn/30 bg-warn/5 px-2 py-1 font-mono text-[11px] text-warn">
-              This token is not on pump.fun. Buy will route through Jupiter.
+            <p className="mt-2 flex items-start gap-1.5 rounded-md border border-warn/30 bg-warn/5 px-2 py-1.5 font-mono text-[11px] text-warn">
+              <span aria-hidden>↪</span>
+              <span>Not on pump.fun. Buy will route through Jupiter.</span>
             </p>
           ) : null}
-        </label>
+        </div>
       ) : null}
 
-      <div className="mb-3 flex gap-2">
-        <button
-          type="button"
-          onClick={() => void runQuote()}
-          disabled={busy || !isValidAmount}
-          className="press flex-1 rounded-md border border-line bg-ink-850 py-2.5 font-mono text-xs hover:border-neon hover:text-neon focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon disabled:opacity-40"
-        >
-          {busy ? "Quoting…" : "Get quote"}
-        </button>
-        <button
-          type="button"
-          onClick={() => setConfirmOpen(true)}
-          disabled={busy || !quote}
-          className={`press relative flex-1 overflow-hidden rounded-md py-2.5 font-mono text-xs font-semibold text-white focus-visible:outline-none focus-visible:ring-2 disabled:opacity-40 ${
-            side === "buy"
-              ? "border border-neon/50 bg-gradient-to-r from-neon to-emerald-400 text-ink-950 focus-visible:ring-neon"
-              : "border border-danger/50 bg-gradient-to-r from-danger to-rose-400 focus-visible:ring-danger"
-          }`}
-        >
-          {settings.simulateMode ? "Paper fill" : `Confirm ${side === "buy" ? "buy" : "sell"}`}
-        </button>
-      </div>
-
+      {/* Quote / summary block */}
       {quote ? (
-        <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-md border border-line bg-ink-850 p-2.5 font-mono text-xs">
+        <dl className="mb-3 grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-md border border-line bg-ink-850 p-2.5 font-mono text-xs">
           <dt className="text-mute">You receive</dt>
           <dd className="text-right text-white">
             {side === "buy"
@@ -960,31 +1183,50 @@ export function QuickTradePanel(props: Props) {
             {venueLabel}
             {quote.graduated ? " · graduated" : ""}
           </dd>
-          <dt className="text-mute">Pay with</dt>
-          <dd className="text-right text-white">
-            {quote.inSymbol} · {shortenAddress(quote.inMint, 4, 4)}
-          </dd>
           <dt className="text-mute">Impact</dt>
           <dd className="text-right text-white">
-            {quote.priceImpactPct == null
-              ? "—"
-              : `${quote.priceImpactPct.toFixed(2)}%`}
+            {quote.priceImpactPct == null ? "—" : `${quote.priceImpactPct.toFixed(2)}%`}
           </dd>
           <dt className="text-mute">Slippage</dt>
           <dd className="text-right text-white">{settings.slippagePct}%</dd>
         </dl>
-      ) : (
-        <p className="rounded-md border border-dashed border-line bg-ink-850 p-3 text-center font-mono text-xs text-mute">
+      ) : !insufficientBalance && isValidAmount ? (
+        <p className="mb-3 rounded-md border border-dashed border-line bg-ink-850 p-2.5 text-center font-mono text-[11px] text-mute">
           {side === "buy"
             ? inMint === SOL_MINT && pumpSupported !== false
-              ? `Pick how much SOL to spend. Min $${MIN_TRADE_USD.toFixed(2)} USD (~${solPrice ? (MIN_TRADE_USD / solPrice).toFixed(4) : "0.0001"} SOL).`
-              : `Pick how much to spend. Min $${MIN_TRADE_USD.toFixed(2)} USD. Routes through Jupiter.`
-            : `Pick how many tokens to sell. Min $${MIN_TRADE_USD.toFixed(2)} USD.`}
+              ? `Tap Get quote to fetch live pricing. Min $${MIN_TRADE_USD.toFixed(2)} USD (~${solPrice ? (MIN_TRADE_USD / solPrice).toFixed(4) : "0.0001"} SOL).`
+              : `Tap Get quote to fetch live pricing. Min $${MIN_TRADE_USD.toFixed(2)} USD. Routes through Jupiter.`
+            : `Tap Get quote to fetch live pricing. Min $${MIN_TRADE_USD.toFixed(2)} USD.`}
         </p>
-      )}
+      ) : null}
+
+      <div className="mb-3 flex gap-2">
+        <button
+          type="button"
+          onClick={() => void runQuote()}
+          disabled={busy || !isValidAmount || insufficientBalance}
+          className="press flex-1 rounded-md border border-line bg-ink-850 py-2.5 font-mono text-xs hover:border-neon hover:text-neon focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon disabled:opacity-40"
+        >
+          {busy ? "Quoting…" : "Get quote"}
+        </button>
+        <button
+          type="button"
+          onClick={() => setConfirmOpen(true)}
+          disabled={busy || !quote || insufficientBalance}
+          className={`press relative flex-1 overflow-hidden rounded-md py-2.5 font-mono text-xs font-semibold text-white focus-visible:outline-none focus-visible:ring-2 disabled:opacity-40 ${
+            side === "buy"
+              ? "border border-neon/50 bg-gradient-to-r from-neon to-emerald-400 text-ink-950 focus-visible:ring-neon"
+              : "border border-danger/50 bg-gradient-to-r from-danger to-rose-400 focus-visible:ring-danger"
+          }`}
+        >
+          {settings.simulateMode
+            ? "Paper fill"
+            : `Confirm ${side === "buy" ? "buy" : "sell"}`}
+        </button>
+      </div>
 
       {receipt ? (
-        <div className="mt-3 space-y-1 rounded-md border border-neon/40 bg-neon/5 p-2.5 text-xs text-neon">
+        <div className="mb-3 space-y-1 rounded-md border border-neon/40 bg-neon/5 p-2.5 text-xs text-neon">
           <p className="font-mono">{receipt.note}</p>
           {receipt.url ? (
             <a
@@ -1000,7 +1242,10 @@ export function QuickTradePanel(props: Props) {
       ) : null}
 
       {errorInfo ? (
-        <div className="mt-3 rounded-md border border-danger/40 bg-danger/5 p-3 text-xs">
+        <div
+          role="alert"
+          className="mb-3 rounded-md border border-danger/40 bg-danger/5 p-3 text-xs"
+        >
           <p className="font-mono font-semibold text-danger">{errorInfo.title}</p>
           <p className="mt-1 font-mono text-mute">{errorInfo.detail}</p>
           {errorInfo.fixes.length > 0 ? (
