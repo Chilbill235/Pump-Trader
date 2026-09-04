@@ -21,16 +21,17 @@ export function MobileTradeSheet(props: {
   initialSide?: "buy" | "sell";
   holdings?: HoldingLike[];
 }) {
+  const { open, onClose, mint, name, symbol, imageUri, initialSide, holdings } = props;
   const sheetRef = useRef<HTMLDivElement | null>(null);
   const startY = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!props.open) return;
+    if (!open) return;
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     document.body.classList.add("modal-open");
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") props.onClose();
+      if (e.key === "Escape") onClose();
     };
     document.addEventListener("keydown", onKey);
     return () => {
@@ -38,7 +39,7 @@ export function MobileTradeSheet(props: {
       document.body.classList.remove("modal-open");
       document.removeEventListener("keydown", onKey);
     };
-  }, [props.open, props.onClose]);
+  }, [open, onClose]);
 
   // Drag-to-dismiss: simple swipe-down on the handle closes the sheet.
   function onTouchStart(e: React.TouchEvent) {
@@ -54,29 +55,29 @@ export function MobileTradeSheet(props: {
     if (!sheetRef.current) return;
     const t = sheetRef.current.style.transform;
     sheetRef.current.style.transform = "";
-    if (t && parseInt(t.replace(/[^\d]/g, ""), 10) > 120) props.onClose();
+    if (t && parseInt(t.replace(/[^\d]/g, ""), 10) > 120) onClose();
     startY.current = null;
   }
 
-  if (!props.open || !props.mint) return null;
+  if (!open || !mint) return null;
   return (
     <div
-      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/80 backdrop-blur-sm sm:hidden"
+      className="fixed inset-0 z-[80] flex items-end justify-center bg-ink-950/85 backdrop-blur-sm sm:hidden"
       role="dialog"
       aria-modal="true"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) props.onClose();
+        if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
         ref={sheetRef}
-        className="flex w-full max-w-md flex-col rounded-t-2xl border border-line bg-ink-900 shadow-2xl transition-transform"
+        className="flex w-full max-w-md flex-col rounded-t-2xl border border-line glass-strong shadow-2xl transition-transform"
         style={{
           maxHeight: "calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom))",
         }}
       >
         <div
-          className="flex shrink-0 items-center justify-between border-b border-line/60 px-4 py-3"
+          className="flex shrink-0 items-center justify-between border-b border-line-soft bg-ink-850/80 px-4 py-3 backdrop-blur"
           style={{ paddingTop: "calc(0.75rem + env(safe-area-inset-top))" }}
         >
           <div className="flex items-center gap-2">
@@ -87,11 +88,11 @@ export function MobileTradeSheet(props: {
               onTouchEnd={onTouchEnd}
               className="block h-1 w-10 rounded-full bg-ink-700"
             />
-            <p className="font-mono text-xs uppercase tracking-wide text-mute">Trade</p>
+            <p className="font-mono text-[10px] uppercase tracking-widest text-mute">Trade</p>
           </div>
           <button
             type="button"
-            onClick={props.onClose}
+            onClick={onClose}
             className="press flex items-center gap-1 rounded-md border border-line bg-ink-800 px-2.5 py-1.5 font-mono text-xs text-mute hover:border-danger hover:text-danger"
             aria-label="Close trade sheet"
           >
@@ -106,13 +107,13 @@ export function MobileTradeSheet(props: {
           style={{ WebkitOverflowScrolling: "touch" }}
         >
           <QuickTradePanel
-            mint={props.mint}
-            name={props.name}
-            symbol={props.symbol}
-            imageUri={props.imageUri}
-            initialSide={props.initialSide}
-            onClose={props.onClose}
-            holdings={props.holdings}
+            mint={mint}
+            name={name}
+            symbol={symbol}
+            imageUri={imageUri}
+            initialSide={initialSide}
+            onClose={onClose}
+            holdings={holdings}
           />
         </div>
       </div>
