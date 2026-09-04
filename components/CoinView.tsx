@@ -13,6 +13,7 @@ import { CopyButton } from "./CopyButton";
 import { QuickTradePanel } from "./QuickTradePanel";
 import { MobileTradeSheet } from "./MobileTradeSheet";
 import { isMobileDevice } from "@/lib/mobile";
+import { useWalletHoldings } from "./useWalletHoldings";
 
 export function CoinView({ mint }: { mint: string }) {
   const { connection } = useConnection();
@@ -23,6 +24,7 @@ export function CoinView({ mint }: { mint: string }) {
   const [solUsd, setSolUsd] = useState<number | null>(null);
   const [tradeOpen, setTradeOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const { holdings } = useWalletHoldings();
 
   useEffect(() => {
     const update = () => setIsMobile(isMobileDevice());
@@ -185,7 +187,13 @@ export function CoinView({ mint }: { mint: string }) {
           </div>
         </section>
         <div className="hidden lg:block lg:sticky lg:top-20 lg:self-start">
-          <QuickTradePanel mint={mint} name={name} symbol={symbol} imageUri={meta?.imageUri} />
+          <QuickTradePanel
+            mint={mint}
+            name={name}
+            symbol={symbol}
+            imageUri={meta?.imageUri}
+            holdings={holdings}
+          />
         </div>
       </div>
 
@@ -196,6 +204,7 @@ export function CoinView({ mint }: { mint: string }) {
         name={name}
         symbol={symbol}
         imageUri={meta?.imageUri}
+        holdings={holdings}
       />
     </div>
   );

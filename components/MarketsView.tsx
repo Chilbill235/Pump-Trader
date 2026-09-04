@@ -9,6 +9,7 @@ import { CopyButton } from "./CopyButton";
 import { QuickTradePanel } from "./QuickTradePanel";
 import { MobileTradeSheet } from "./MobileTradeSheet";
 import { isMobileDevice } from "@/lib/mobile";
+import { useWalletHoldings } from "./useWalletHoldings";
 
 type Kind = "trending" | "newest";
 
@@ -21,6 +22,7 @@ export function MarketsView() {
   const [loading, setLoading] = useState(true);
   const [activeMint, setActiveMint] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
+  const { holdings } = useWalletHoldings();
 
   useEffect(() => {
     const update = () => setIsMobile(isMobileDevice());
@@ -271,9 +273,14 @@ export function MarketsView() {
                 symbol={activeCoin.symbol}
                 imageUri={activeCoin.imageUri}
                 onClose={() => setActiveMint(null)}
+                holdings={holdings}
               />
             ) : (
-              <QuickTradePanel mint={activeMint} onClose={() => setActiveMint(null)} />
+              <QuickTradePanel
+                mint={activeMint}
+                onClose={() => setActiveMint(null)}
+                holdings={holdings}
+              />
             )
           ) : (
             <div className="rounded border border-dashed border-line bg-ink-800 p-6 text-center text-sm text-mute">
@@ -305,6 +312,7 @@ export function MarketsView() {
         name={activeCoin?.name}
         symbol={activeCoin?.symbol}
         imageUri={activeCoin?.imageUri}
+        holdings={holdings}
       />
     </div>
   );
