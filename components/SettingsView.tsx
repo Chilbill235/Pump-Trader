@@ -98,8 +98,10 @@ export function SettingsView() {
     <div className="mx-auto max-w-2xl space-y-4 pb-20">
       <header className="space-y-2">
         <div>
-          <h1 className="font-mono text-lg tracking-wide">Settings</h1>
-          <p className="text-xs text-mute">
+          <h1 className="text-xl font-semibold sm:text-2xl">
+            <span className="text-gradient-warm">Settings</span>
+          </h1>
+          <p className="text-xs text-mute sm:text-sm">
             Stored in this browser only, scoped to your account. No custodial backend. Never paste a
             private key.
           </p>
@@ -128,9 +130,9 @@ export function SettingsView() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search settings…"
-            className="min-w-0 flex-1 rounded border border-line bg-ink-800 px-3 py-2 font-mono text-sm"
+            className="min-w-0 flex-1 rounded-md border border-line bg-ink-850 px-3 py-2 font-mono text-sm focus:border-neon focus:outline-none"
           />
-          <label className="flex items-center gap-1 rounded border border-line bg-ink-800 px-2 py-1 font-mono text-[11px] text-mute">
+          <label className="flex items-center gap-1 rounded-md border border-line bg-ink-850 px-2 py-1 font-mono text-[11px] text-mute">
             <input
               type="checkbox"
               checked={advanced}
@@ -149,27 +151,27 @@ export function SettingsView() {
           desc="The Solana RPC endpoint the app talks to. Use a private one (Helius, Triton, QuickNode) to avoid 403/429s."
         >
           <label className="block space-y-1">
-            <span className="font-mono text-[11px] uppercase text-mute">RPC URL</span>
+            <span className="font-mono text-[10px] uppercase tracking-widest text-mute">RPC URL</span>
             <input
               value={settings.rpcUrl}
               onChange={(e) => {
                 const v = e.target.value.trim();
                 update({ rpcUrl: /^https?:\/\//i.test(v) || v === "" ? v : settings.rpcUrl });
               }}
-              className="w-full rounded border border-line bg-ink-800 px-3 py-2 font-mono text-sm"
+              className="w-full rounded-md border border-line bg-ink-850 px-3 py-2 font-mono text-sm focus:border-neon focus:bg-ink-900 focus:outline-none"
             />
             <button
               type="button"
-              className="text-[11px] text-mute underline"
+              className="press rounded text-[11px] text-mute underline hover:text-neon"
               onClick={() => update({ rpcUrl: DEFAULT_RPC })}
             >
               Reset to env / public mainnet
             </button>
             {!/^https?:\/\//i.test(settings.rpcUrl) && settings.rpcUrl !== "" && (
-              <p className="text-[11px] text-danger">Enter a valid HTTP(S) URL or reset to default.</p>
+              <p className="rounded-md border border-danger/40 bg-danger/5 p-2 text-[11px] text-danger">Enter a valid HTTP(S) URL or reset to default.</p>
             )}
             {isPublicRpc(settings.rpcUrl) ? (
-              <p className="rounded border border-warn/40 bg-warn/10 p-2 text-[11px] text-warn">
+              <p className="rounded-md border border-warn/40 bg-warn/5 p-2 text-[11px] text-warn">
                 {PUBLIC_RPC_WARNING}
               </p>
             ) : null}
@@ -178,7 +180,7 @@ export function SettingsView() {
             <button
               type="button"
               onClick={() => void notif.requestPushPermission()}
-              className="press flex w-full items-center gap-2 rounded border border-neon/40 bg-neon/10 px-3 py-2 text-left font-mono text-xs text-neon hover:bg-neon/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon"
+              className="press flex w-full items-center gap-2 rounded-md border border-neon/40 bg-neon/10 px-3 py-2 text-left font-mono text-xs text-neon hover:bg-neon/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon"
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
                 <path
@@ -197,7 +199,7 @@ export function SettingsView() {
               Enable browser push notifications
             </button>
           ) : (
-            <p className="flex items-center gap-1 rounded border border-neon/40 bg-neon/5 p-2 text-[11px] text-neon">
+            <p className="flex items-center gap-1 rounded-md border border-neon/40 bg-neon/5 p-2 text-[11px] text-neon">
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
                 <path
                   d="M2.5 6.5L5 9L9.5 3.5"
@@ -354,11 +356,11 @@ export function SettingsView() {
             <button
               type="button"
               onClick={exportData}
-              className="press rounded border border-line bg-ink-800 px-3 py-2 font-mono text-xs hover:border-neon hover:text-neon"
+              className="press rounded-md border border-line bg-ink-850 px-3 py-2 font-mono text-xs text-mute hover:border-neon hover:text-neon"
             >
               Export backup
             </button>
-            <label className="press cursor-pointer rounded border border-line bg-ink-800 px-3 py-2 font-mono text-xs hover:border-neon hover:text-neon">
+            <label className="press cursor-pointer rounded-md border border-line bg-ink-850 px-3 py-2 font-mono text-xs text-mute hover:border-neon hover:text-neon">
               Import backup
               <input type="file" accept="application/json" onChange={importData} className="hidden" />
             </label>
@@ -372,7 +374,7 @@ export function SettingsView() {
           <button
             type="button"
             onClick={() => update({ autoTrade: false, autoSell: false })}
-            className="press w-full rounded bg-danger px-4 py-2.5 font-mono text-sm font-semibold text-white hover:bg-danger/80"
+            className="press relative w-full overflow-hidden rounded-md border border-danger/50 bg-gradient-to-r from-danger to-rose-400 px-4 py-3 font-mono text-sm font-semibold text-white shadow-[0_0_18px_-4px_rgba(255,71,87,0.5)] hover:from-danger/90"
           >
             STOP ALL AUTO TRADING
           </button>
@@ -384,12 +386,12 @@ export function SettingsView() {
 
 function Section({ title, desc, children }: { title: string; desc?: string; children: React.ReactNode }) {
   return (
-    <section className="rounded border border-line bg-ink-800 p-3">
-      <header className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="font-mono text-sm tracking-wide">{title}</h2>
+    <section className="relative overflow-hidden rounded-xl border border-line glass">
+      <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line-soft bg-ink-850/80 px-3 py-2 backdrop-blur">
+        <h2 className="font-mono text-sm font-semibold tracking-wide text-white">{title}</h2>
         {desc ? <p className="text-[11px] text-mute">{desc}</p> : null}
       </header>
-      <div className="space-y-3">{children}</div>
+      <div className="space-y-3 p-3">{children}</div>
     </section>
   );
 }
@@ -402,17 +404,44 @@ function Toggle(props: {
   danger?: boolean;
 }) {
   return (
-    <label className="flex items-start justify-between gap-4 rounded border border-line bg-ink-800 p-3">
+    <label
+      className={`flex items-start justify-between gap-4 rounded-md border p-3 transition-colors ${
+        props.danger
+          ? props.checked
+            ? "border-danger/40 bg-danger/5"
+            : "border-line bg-ink-850 hover:border-danger/40"
+          : props.checked
+            ? "border-neon/40 bg-neon/5"
+            : "border-line bg-ink-850 hover:border-neon/40"
+      }`}
+    >
       <span>
-        <span className="block text-sm">{props.label}</span>
+        <span className="block text-sm text-white">{props.label}</span>
         <span className="block text-xs text-mute">{props.hint}</span>
       </span>
-      <input
-        type="checkbox"
-        checked={props.checked}
-        onChange={(e) => props.onChange(e.target.checked)}
-        className={`mt-1 h-4 w-4 ${props.danger ? "accent-danger" : "accent-neon"}`}
-      />
+      <span
+        className={`relative mt-0.5 inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors ${
+          props.checked
+            ? props.danger
+              ? "bg-danger/70"
+              : "bg-neon/70"
+            : "bg-ink-700"
+        }`}
+      >
+        <span
+          aria-hidden
+          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+            props.checked ? "translate-x-4" : "translate-x-0.5"
+          }`}
+        />
+        <input
+          type="checkbox"
+          checked={props.checked}
+          onChange={(e) => props.onChange(e.target.checked)}
+          className="absolute inset-0 cursor-pointer opacity-0"
+          aria-label={props.label}
+        />
+      </span>
     </label>
   );
 }
@@ -431,7 +460,7 @@ function NumberField(props: {
   }, [props.value]);
   return (
     <label className="block space-y-1">
-      <span className="font-mono text-[11px] uppercase text-mute">{props.label}</span>
+      <span className="font-mono text-[10px] uppercase tracking-widest text-mute">{props.label}</span>
       <input
         type="number"
         min={props.min}
@@ -456,7 +485,7 @@ function NumberField(props: {
           if (clamped !== n) setDraft(String(clamped));
           props.onChange(clamped);
         }}
-        className="w-full rounded border border-line bg-ink-800 px-3 py-2 font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon"
+        className="w-full rounded-md border border-line bg-ink-850 px-3 py-2 font-mono text-sm focus:border-neon focus:bg-ink-900 focus:outline-none"
       />
       <p className="text-[11px] text-mute">{props.hint}</p>
     </label>
