@@ -128,13 +128,16 @@ export function NotificationBell() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="touch-target press relative flex h-8 w-8 items-center justify-center rounded border border-line bg-ink-800 font-mono text-sm text-mute hover:border-neon hover:text-neon"
+        className="press relative flex h-9 w-9 items-center justify-center rounded-md border border-line bg-ink-800 text-mute hover:border-neon hover:text-neon focus:outline-none focus-visible:ring-2 focus-visible:ring-neon"
         aria-label={`Notifications${unread > 0 ? ` (${unread} unread)` : ""}`}
         title="Notifications"
       >
-        🔔
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
+          <path d="M3.5 12.5V8a4.5 4.5 0 119 0v4.5l1 1H2.5l1-1z" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M6.5 13.5a1.5 1.5 0 003 0" strokeLinecap="round" />
+        </svg>
         {unread > 0 ? (
-          <span className="absolute -right-1 -top-1 min-w-[18px] rounded-full bg-danger px-1 text-center font-mono text-[10px] font-bold text-white">
+          <span className="absolute -right-1 -top-1 min-w-[18px] rounded-full bg-danger px-1 text-center font-mono text-[10px] font-bold leading-4 text-white">
             {unread > 9 ? "9+" : unread}
           </span>
         ) : null}
