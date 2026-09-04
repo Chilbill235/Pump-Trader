@@ -18,6 +18,9 @@ import { useInstallPrompt } from "./useInstallPrompt";
 import { loadAccountProfile, saveAccountProfile } from "@/lib/profile";
 import { ConnectWalletButton } from "./ConnectWalletButton";
 import { NavIcon, type NavIconName } from "./icons/NavIcon";
+import { MobileNavDrawer } from "./MobileNavDrawer";
+import { MobileProfileSheet } from "./MobileProfileSheet";
+import { QuickMintFAB } from "./QuickMintFAB";
 
 type NavItem = { href: string; label: string; short: string; icon: NavIconName };
 
@@ -46,17 +49,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [botModalOpen, setBotModalOpen] = useState(false);
   const [botSession, setBotSession] = useState<BotSessionInfo | null>(null);
   const [navOpen, setNavOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [mobileProfileOpen, setMobileProfileOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
-    if (!navOpen) return;
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 639px)");
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    if (!navOpen && !mobileNavOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setNavOpen(false);
+      if (e.key === "Escape") {
+        setNavOpen(false);
+        setMobileNavOpen(false);
+      }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [navOpen]);
+  }, [navOpen, mobileNavOpen]);
 
   useEffect(() => {
     if (!activeAccount) {
@@ -129,10 +147,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         pathname={pathname}
         navOpen={navOpen}
         setNavOpen={setNavOpen}
+        mobileNavOpen={mobileNavOpen}
+        setMobileNavOpen={setMobileNavOpen}
         profileOpen={profileOpen}
         setProfileOpen={setProfileOpen}
+        mobileProfileOpen={mobileProfileOpen}
+        setMobileProfileOpen={setMobileProfileOpen}
         notifOpen={notifOpen}
         setNotifOpen={setNotifOpen}
+        isMobile={isMobile}
         settings={settings}
         walletOk={walletOk}
         botRunning={botRunning}
@@ -149,14 +172,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         onLock={() => {
           lock();
           setProfileOpen(false);
+          setMobileProfileOpen(false);
         }}
         onSwitch={(id) => {
           switchTo(id);
           setProfileOpen(false);
+          setMobileProfileOpen(false);
         }}
         onRemove={(id) => {
           remove(id);
           setProfileOpen(false);
+          setMobileProfileOpen(false);
         }}
       />
 
@@ -187,6 +213,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <NotificationPanel open={notifOpen} onClose={() => setNotifOpen(false)} />
 
       <StartBotModal open={botModalOpen} onClose={() => setBotModalOpen(false)} />
+
+      <MobileNavDrawer
+        open={mobileNavOpen}
+        onClose={() => setMobileNavOpen(false)}
+        onOpenProfile={() => {
+          setMobileNavOpen(false);
+          setMobileProfileOpen(true);
+        }}
+      />
+      <MobileProfileSheet open={mobileProfileOpen} onClose={() => setMobileProfileOpen(false)} />
+      <QuickMintFAB
+        visible={
+          pathname === "/" ||
+          pathname === "/markets" ||
+          pathname === "/watch" ||
+          pathname === "/positions" ||
+          pathname.startsWith("/coin/")
+        }
+      />
     </div>
   );
 }
@@ -195,10 +240,15 @@ function Header(props: {
   pathname: string;
   navOpen: boolean;
   setNavOpen: (v: boolean | ((v: boolean) => boolean)) => void;
+  mobileNavOpen: boolean;
+  setMobileNavOpen: (v: boolean | ((v: boolean) => boolean)) => void;
   profileOpen: boolean;
   setProfileOpen: (v: boolean | ((v: boolean) => boolean)) => void;
+  mobileProfileOpen: boolean;
+  setMobileProfileOpen: (v: boolean | ((v: boolean) => boolean)) => void;
   notifOpen: boolean;
   setNotifOpen: (v: boolean | ((v: boolean) => boolean)) => void;
+  isMobile: boolean;
   settings: ReturnType<typeof useSettings>["settings"];
   walletOk: boolean;
   botRunning: boolean;
@@ -216,22 +266,22 @@ function Header(props: {
   onSwitch: (id: string) => void;
   onRemove: (id: string) => void;
 }) {
+  const { activeAccount: headerAccount } = useAccounts();
+  const headerProfile = useMemo(() => loadAccountProfile(props.activeId), [props.activeId]);
+  const mobileAccent = headerProfile?.color ?? "#39ff88";
+  const mobileInitial = (headerAccount?.username ?? "?").slice(0, 1).toUpperCase();
   return (
     <header className="sticky top-0 z-30 border-b border-line-soft/80 glass safe-top">
       <div className="mx-auto flex max-w-[1400px] items-center gap-2 px-3 py-2.5 sm:gap-3 sm:px-4">
         <button
           type="button"
           className="press flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-line bg-ink-800 text-mute hover:border-neon hover:text-neon sm:hidden"
-          onClick={() => props.setNavOpen((v) => !v)}
-          aria-label={props.navOpen ? "Close menu" : "Open menu"}
-          aria-expanded={props.navOpen}
+          onClick={() => props.setMobileNavOpen(true)}
+          aria-label="Open menu"
+          aria-expanded={props.mobileNavOpen}
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
-            {props.navOpen ? (
-              <path d="M3 3l10 10M13 3L3 13" strokeLinecap="round" />
-            ) : (
-              <path d="M2 4h12M2 8h12M2 12h12" strokeLinecap="round" />
-            )}
+            <path d="M2 4h12M2 8h12M2 12h12" strokeLinecap="round" />
           </svg>
         </button>
 
@@ -296,22 +346,50 @@ function Header(props: {
             endpoint={props.endpoint}
           /> : null}
           <NotificationBell onOpenChange={props.setNotifOpen} open={props.notifOpen} />
-          <ProfileMenu
-            open={props.profileOpen}
-            onToggle={() => {
-              props.setProfileOpen((v) => !v);
-              props.setNotifOpen(false);
-            }}
-            onClose={() => props.setProfileOpen(false)}
-            walletName={props.walletName}
-            publicKey={props.publicKey}
-            walletOk={props.walletOk}
-            accounts={props.accounts}
-            activeId={props.activeId}
-            onLock={props.onLock}
-            onSwitch={props.onSwitch}
-            onRemove={props.onRemove}
-          />
+          {props.activeId ? (
+            <>
+              <button
+                type="button"
+                onClick={() => props.setMobileProfileOpen(true)}
+                className="press relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line bg-ink-800/80 sm:hidden"
+                title="Account"
+                aria-label="Account"
+                aria-haspopup="dialog"
+                style={{ borderColor: `${mobileAccent}66` }}
+              >
+                <span
+                  aria-hidden
+                  className="flex h-7 w-7 items-center justify-center rounded-full font-mono text-xs font-bold text-ink-950"
+                  style={{ backgroundColor: mobileAccent, boxShadow: `0 0 10px ${mobileAccent}55` }}
+                >
+                  {mobileInitial}
+                </span>
+                {props.walletOk ? (
+                  <span aria-hidden className="live-pulse absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border border-ink-900 bg-neon" />
+                ) : null}
+              </button>
+              <div className="hidden sm:block">
+                <ProfileMenu
+                  open={props.profileOpen}
+                  onToggle={() => {
+                    props.setProfileOpen((v) => !v);
+                    props.setNotifOpen(false);
+                  }}
+                  onClose={() => props.setProfileOpen(false)}
+                  onMobileOpen={() => props.setMobileProfileOpen(true)}
+                  mobileOnlyTrigger={false}
+                  walletName={props.walletName}
+                  publicKey={props.publicKey}
+                  walletOk={props.walletOk}
+                  accounts={props.accounts}
+                  activeId={props.activeId}
+                  onLock={props.onLock}
+                  onSwitch={props.onSwitch}
+                  onRemove={props.onRemove}
+                />
+              </div>
+            </>
+          ) : null}
         </div>
       </div>
     </header>
@@ -517,6 +595,8 @@ function ProfileMenu(props: {
   open: boolean;
   onToggle: () => void;
   onClose: () => void;
+  onMobileOpen: () => void;
+  mobileOnlyTrigger: boolean;
   walletName: string | null;
   publicKey: string | null;
   walletOk: boolean;
@@ -562,11 +642,11 @@ function ProfileMenu(props: {
       <button
         ref={buttonRef}
         type="button"
-        onClick={props.onToggle}
+        onClick={props.mobileOnlyTrigger ? props.onMobileOpen : props.onToggle}
         className="press relative flex h-9 items-center gap-2 rounded-md border border-line bg-ink-800/80 pl-1.5 pr-2.5 font-mono text-xs hover:border-neon hover:bg-ink-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-neon"
         title="Account menu"
-        aria-haspopup="menu"
-        aria-expanded={props.open}
+        aria-haspopup={props.mobileOnlyTrigger ? "dialog" : "menu"}
+        aria-expanded={props.mobileOnlyTrigger ? undefined : props.open}
       >
         <span
           aria-hidden

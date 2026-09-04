@@ -309,6 +309,22 @@ input[type="number"] {
   animation: slide-in-right 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
+@keyframes slide-in-left {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+.slide-in-left {
+  animation: slide-in-left 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.slide-up {
+  animation: slide-up 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
 @keyframes fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
