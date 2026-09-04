@@ -1,6 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
+// In-memory cache of {url: true} for images that 502'd. Avoids re-trying
+// the same upstream for the rest of the session and stops the browser
+// from spamming the proxy when IPFS is down.
+const recentlyFailed = new Set<string>();
 
 export function CoinImage({
   src,
@@ -13,7 +18,15 @@ export function CoinImage({
   size?: number;
   className?: string;
 }) {
-  const [errored, setErrored] = useState(false);
+  const [errored, setErrored] = useState(() => {
+    if (!src) return true;
+    return recentlyFailed.has(src);
+  });
+  const imgRef = useRef<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    setErrored(!src || recentlyFailed.has(src));
+  }, [src]);
 
   if (!src || errored) {
     return (
@@ -39,6 +52,7 @@ export function CoinImage({
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
+      ref={imgRef}
       src={proxied}
       alt={alt}
       width={size}
@@ -47,7 +61,10 @@ export function CoinImage({
       decoding="async"
       className={`shrink-0 rounded object-cover ${className ?? ""}`}
       style={{ width: size, height: size }}
-      onError={() => setErrored(true)}
+      onError={() => {
+        if (src) recentlyFailed.add(src);
+        setErrored(true);
+      }}
     />
   );
 }
