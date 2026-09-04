@@ -234,10 +234,12 @@ export function StartBotModal({ open, onClose }: Props) {
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded border border-line px-2 py-1 font-mono text-xs text-mute hover:border-danger hover:text-danger"
+            className="press shrink-0 rounded border border-line p-1 text-mute hover:border-danger hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
             aria-label="Close"
           >
-            ✕
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+              <path d="M2 2L12 12M12 2L2 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
           </button>
         </div>
 
@@ -287,7 +289,7 @@ export function StartBotModal({ open, onClose }: Props) {
                   type="button"
                   key={h}
                   onClick={() => setDurationH(h)}
-                  className={`rounded border px-3 py-1 font-mono text-xs ${
+                  className={`press rounded border px-3 py-1 font-mono text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon ${
                     durationH === h
                       ? "border-neon text-neon"
                       : "border-line text-mute hover:border-neon/60"
@@ -417,7 +419,7 @@ export function StartBotModal({ open, onClose }: Props) {
           <button
             type="button"
             onClick={onClose}
-            className="rounded border border-line px-3 py-1.5 font-mono text-xs text-mute hover:border-danger hover:text-danger"
+            className="press rounded border border-line px-3 py-1.5 font-mono text-xs text-mute hover:border-danger hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
           >
             Cancel
           </button>
@@ -425,7 +427,7 @@ export function StartBotModal({ open, onClose }: Props) {
             type="button"
             onClick={() => void start()}
             disabled={busy || !canStart}
-            className="rounded bg-neon px-4 py-1.5 font-mono text-xs text-ink-950 disabled:opacity-40"
+            className="press rounded bg-neon px-4 py-1.5 font-mono text-xs text-ink-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon disabled:opacity-40"
           >
             {busy
               ? "Starting…"

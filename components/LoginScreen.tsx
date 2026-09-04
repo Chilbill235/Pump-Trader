@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAccounts } from "./AccountsProvider";
 import { isAccountsCapable } from "@/lib/accounts";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 type Mode = "create" | "unlock";
 
@@ -28,6 +29,7 @@ export function LoginScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPin, setShowPin] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [hydratedOnce, setHydratedOnce] = useState(false);
   const usernameRef = useRef<HTMLInputElement | null>(null);
   const pinRef = useRef<HTMLInputElement | null>(null);
@@ -45,7 +47,6 @@ export function LoginScreen() {
     }
   }, [ready, accounts.length, hydratedOnce]);
 
-  // Auto-focus the right field when mode flips.
   useEffect(() => {
     if (mode === "create") {
       setTimeout(() => usernameRef.current?.focus(), 50);
@@ -81,6 +82,10 @@ export function LoginScreen() {
     setError(null);
     try {
       if (mode === "create") {
+        if (username.trim().length < 2) {
+          setError("Username must be at least 2 characters.");
+          return;
+        }
         if (pin.length < 4) {
           setError("PIN must be at least 4 characters.");
           return;
@@ -110,18 +115,11 @@ export function LoginScreen() {
   }
 
   const existingAccounts = accounts;
+  const deleteAccount =
+    deleteTarget ? existingAccounts.find((a) => a.id === deleteTarget) ?? null : null;
 
   return (
-    <div className="relative grid min-h-screen place-items-center overflow-hidden bg-ink-950 px-4 py-8 text-zinc-100">
-      {/* Decorative background gradient */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-30"
-        style={{
-          background:
-            "radial-gradient(circle at 20% 10%, rgba(57,255,136,0.18), transparent 50%), radial-gradient(circle at 80% 80%, rgba(14,165,233,0.18), transparent 50%)",
-        }}
-      />
+    <div className="relative grid min-h-screen place-items-center overflow-hidden bg-ink-950 px-4 py-8 text-zinc-100 app-backdrop">
       <div className="relative w-full max-w-md space-y-4">
         <div className="text-center">
           <p className="inline-flex items-center gap-2 rounded-full border border-line bg-ink-800/60 px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-mute">
@@ -137,10 +135,10 @@ export function LoginScreen() {
         </div>
 
         {existingAccounts.length > 0 ? (
-          <div className="flex rounded border border-line bg-ink-800 p-1 font-mono text-xs">
+          <div className="flex rounded-lg border border-line bg-ink-800 p-1 font-mono text-xs">
             <button
               type="button"
-              className={`press flex-1 touch-target rounded px-3 py-2 ${mode === "unlock" ? "bg-ink-700 text-white" : "text-mute"}`}
+              className={`press flex-1 rounded-md px-3 py-2 ${mode === "unlock" ? "bg-ink-700 text-white" : "text-mute"}`}
               onClick={() => {
                 setMode("unlock");
                 setError(null);
@@ -150,7 +148,7 @@ export function LoginScreen() {
             </button>
             <button
               type="button"
-              className={`press flex-1 touch-target rounded px-3 py-2 ${mode === "create" ? "bg-ink-700 text-white" : "text-mute"}`}
+              className={`press flex-1 rounded-md px-3 py-2 ${mode === "create" ? "bg-ink-700 text-white" : "text-mute"}`}
               onClick={() => {
                 setMode("create");
                 setError(null);
@@ -161,7 +159,7 @@ export function LoginScreen() {
           </div>
         ) : null}
 
-        <form onSubmit={submit} className="space-y-3 rounded border border-line bg-ink-800/90 p-4 shadow-2xl backdrop-blur">
+        <form onSubmit={submit} className="space-y-3 rounded-xl border border-line bg-ink-800/90 p-4 shadow-2xl backdrop-blur">
           {mode === "unlock" ? (
             <div className="space-y-2">
               <span className="block font-mono text-[11px] uppercase text-mute">Account</span>
@@ -177,7 +175,7 @@ export function LoginScreen() {
                           setError(null);
                           setTimeout(() => pinRef.current?.focus(), 50);
                         }}
-                        className={`press touch-target w-full rounded border px-2 py-2 text-left ${
+                        className={`press w-full rounded-lg border px-2 py-2 text-left transition-colors ${
                           active
                             ? "border-neon bg-neon/10 text-neon"
                             : "border-line bg-ink-900 text-mute hover:border-neon/60"
@@ -203,7 +201,7 @@ export function LoginScreen() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="e.g. alice"
-                className="mt-1 w-full rounded border border-line bg-ink-900 px-3 py-2 font-mono text-sm"
+                className="mt-1 w-full rounded-lg border border-line bg-ink-900 px-3 py-2 font-mono text-sm"
                 maxLength={24}
                 autoComplete="username"
               />
@@ -234,7 +232,7 @@ export function LoginScreen() {
               }}
               minLength={4}
               maxLength={64}
-              className="mt-1 w-full rounded border border-line bg-ink-900 px-3 py-2 font-mono text-sm"
+              className="mt-1 w-full rounded-lg border border-line bg-ink-900 px-3 py-2 font-mono text-sm"
               aria-describedby="pin-strength"
             />
             {mode === "create" && pin.length > 0 ? (
@@ -268,13 +266,16 @@ export function LoginScreen() {
                 }}
                 minLength={4}
                 maxLength={64}
-                className="mt-1 w-full rounded border border-line bg-ink-900 px-3 py-2 font-mono text-sm"
+                className="mt-1 w-full rounded-lg border border-line bg-ink-900 px-3 py-2 font-mono text-sm"
               />
             </label>
           ) : null}
 
           {error ? (
-            <p className="press rounded border border-danger/40 bg-danger/10 p-2 text-xs text-danger">
+            <p
+              role="alert"
+              className="press rounded-md border border-danger/40 bg-danger/10 p-2 text-xs text-danger"
+            >
               {error}
             </p>
           ) : null}
@@ -282,7 +283,7 @@ export function LoginScreen() {
           <button
             type="submit"
             disabled={busy}
-            className="press touch-target w-full rounded bg-neon py-2.5 font-mono text-sm font-semibold text-ink-950 disabled:opacity-40"
+            className="press w-full rounded-lg bg-neon py-2.5 font-mono text-sm font-semibold text-ink-950 disabled:opacity-40"
           >
             {busy ? (
               <span className="inline-flex items-center gap-2">
@@ -299,13 +300,8 @@ export function LoginScreen() {
           {mode === "unlock" && selectedId ? (
             <button
               type="button"
-              onClick={() => {
-                if (confirm("Delete this account and all its data? This cannot be undone.")) {
-                  remove(selectedId);
-                  setSelectedId(null);
-                }
-              }}
-              className="press w-full rounded border border-line bg-ink-900 px-3 py-1.5 font-mono text-[11px] text-mute hover:border-danger hover:text-danger"
+              onClick={() => setDeleteTarget(selectedId)}
+              className="press w-full rounded-lg border border-line bg-ink-900 px-3 py-1.5 font-mono text-[11px] text-mute hover:border-danger hover:text-danger"
             >
               Delete this account
             </button>
@@ -313,7 +309,7 @@ export function LoginScreen() {
         </form>
 
         {existingAccounts.length > 0 ? (
-          <details className="rounded border border-line bg-ink-800/60 p-3 text-xs text-mute">
+          <details className="rounded-xl border border-line bg-ink-800/60 p-3 text-xs text-mute">
             <summary className="press cursor-pointer list-none font-mono text-[11px] uppercase tracking-wide">
               Accounts on this device ({existingAccounts.length})
             </summary>
@@ -338,6 +334,34 @@ export function LoginScreen() {
           Not financial advice. Most pump.fun coins go to zero. You are responsible for every trade.
         </p>
       </div>
+
+      <ConfirmDialog
+        open={!!deleteAccount}
+        title={deleteAccount ? `Delete @${deleteAccount.username}?` : "Delete account?"}
+        body={
+          <div className="space-y-1">
+            <p>
+              This permanently removes the account and all of its data from this device:
+            </p>
+            <ul className="list-disc space-y-0.5 pl-5">
+              <li>Positions, settings, TP/SL, profile</li>
+              <li>Bot log, closed trades, equity curve</li>
+              <li>Notifications, alerts, bankroll config</li>
+            </ul>
+            <p className="text-warn">There is no recovery. Make sure you have a backup export if you need one.</p>
+          </div>
+        }
+        confirmLabel="Delete forever"
+        danger
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) {
+            remove(deleteTarget);
+            setSelectedId(null);
+          }
+          setDeleteTarget(null);
+        }}
+      />
     </div>
   );
 }

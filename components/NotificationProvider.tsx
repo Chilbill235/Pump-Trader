@@ -291,6 +291,18 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
 export function useNotifications(): Ctx {
   const ctx = useContext(NotificationContext);
-  if (!ctx) throw new Error("useNotifications must be used inside NotificationProvider");
-  return ctx;
+  if (ctx) return ctx;
+  // Defensive fallback so a stray caller doesn't tear down the app.
+  return {
+    notifications: [],
+    unread: 0,
+    toast: null,
+    markRead: () => undefined,
+    markAllRead: () => undefined,
+    clear: () => undefined,
+    dismissToast: () => undefined,
+    permission: typeof Notification !== "undefined" ? Notification.permission : "default",
+    requestPushPermission: async () =>
+      typeof Notification !== "undefined" ? Notification.permission : ("denied" as NotificationPermission),
+  };
 }

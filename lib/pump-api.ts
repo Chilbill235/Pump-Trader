@@ -37,8 +37,8 @@ const IPFS_HOSTS = [
   "cloudflare-ipfs.com",
   "nftstorage.link",
   "cf-ipfs.com",
-  "magenta.imaginative-banana.ts.net",
   "dweb.link",
+  "ipfs.dweb.link",
 ];
 
 /** Rewrite a raw image URI to the app's own /api/img proxy so the browser never hits a cross-origin gateway. */
@@ -118,24 +118,34 @@ async function fetchJson(
   url: string,
   init?: RequestInit,
 ): Promise<{ ok: true; data: unknown } | { ok: false; status: number; body: string }> {
-  const res = await fetch(url, {
-    ...init,
-    headers: {
-      Accept: "application/json",
-      Origin: "https://pump.fun",
-      "User-Agent": "pump-trader/0.1 (personal dashboard)",
-      ...(init?.headers ?? {}),
-    },
-    cache: "no-store",
-  });
-  const body = await res.text();
-  if (!res.ok) {
-    return { ok: false, status: res.status, body: body.slice(0, 500) };
-  }
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
   try {
-    return { ok: true, data: JSON.parse(body) as unknown };
-  } catch {
-    return { ok: false, status: res.status, body: "invalid json" };
+    const res = await fetch(url, {
+      ...init,
+      signal: init?.signal ?? ctrl.signal,
+      headers: {
+        Accept: "application/json",
+        Origin: "https://pump.fun",
+        "User-Agent": "pump-trader/0.1 (personal dashboard)",
+        ...(init?.headers ?? {}),
+      },
+      cache: "no-store",
+    });
+    const body = await res.text();
+    if (!res.ok) {
+      return { ok: false, status: res.status, body: body.slice(0, 500) };
+    }
+    try {
+      return { ok: true, data: JSON.parse(body) as unknown };
+    } catch {
+      return { ok: false, status: res.status, body: "invalid json" };
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, status: 0, body: message };
+  } finally {
+    clearTimeout(timer);
   }
 }
 

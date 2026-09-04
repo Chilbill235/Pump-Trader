@@ -745,7 +745,7 @@ function CandidateCard(props: {
           type="button"
           disabled={props.busy}
           onClick={props.onApprove}
-          className="rounded bg-neon px-3 py-1.5 font-mono text-xs text-ink-950 disabled:opacity-40"
+          className="press rounded bg-neon px-3 py-1.5 font-mono text-xs text-ink-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon disabled:opacity-40"
         >
           {props.busy ? "Working…" : props.simulate ? "Approve paper" : "Approve live…"}
         </button>
@@ -753,7 +753,7 @@ function CandidateCard(props: {
           type="button"
           disabled={props.busy}
           onClick={props.onReject}
-          className="rounded border border-line px-3 py-1.5 font-mono text-xs text-mute hover:border-danger hover:text-danger"
+          className="press rounded border border-line px-3 py-1.5 font-mono text-xs text-mute hover:border-danger hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:opacity-40"
         >
           Reject
         </button>

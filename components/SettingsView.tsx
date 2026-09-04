@@ -104,11 +104,22 @@ export function SettingsView() {
             private key.
           </p>
           <p
-            className={`mt-1 font-mono text-[11px] transition-opacity ${
+            className={`mt-1 flex items-center gap-1 font-mono text-[11px] transition-opacity ${
               savedAt ? "text-neon opacity-100" : "text-mute opacity-60"
             }`}
           >
-            {savedAt ? "✓ autosaved" : "autosaves as you type"}
+            {savedAt ? (
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                <path
+                  d="M2.5 6.5L5 9L9.5 3.5"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            ) : null}
+            {savedAt ? "autosaved" : "autosaves as you type"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -167,13 +178,36 @@ export function SettingsView() {
             <button
               type="button"
               onClick={() => void notif.requestPushPermission()}
-              className="press w-full rounded border border-neon/40 bg-neon/10 px-3 py-2 text-left font-mono text-xs text-neon hover:bg-neon/20"
+              className="press flex w-full items-center gap-2 rounded border border-neon/40 bg-neon/10 px-3 py-2 text-left font-mono text-xs text-neon hover:bg-neon/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon"
             >
-              🔔 Enable browser push notifications
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                <path
+                  d="M3.5 5.5C3.5 3.84 4.84 2.5 6.5 2.5H7.5C9.16 2.5 10.5 3.84 10.5 5.5V8.5L12 11H2L3.5 8.5V5.5Z"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M5.5 12.5C5.8 13.1 6.4 13.5 7 13.5C7.6 13.5 8.2 13.1 8.5 12.5"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                  strokeLinecap="round"
+                />
+              </svg>
+              Enable browser push notifications
             </button>
           ) : (
-            <p className="rounded border border-neon/40 bg-neon/5 p-2 text-[11px] text-neon">
-              ✓ Push notifications enabled. You&apos;ll hear about TP/SL hits, bot events, and trades.
+            <p className="flex items-center gap-1 rounded border border-neon/40 bg-neon/5 p-2 text-[11px] text-neon">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                <path
+                  d="M2.5 6.5L5 9L9.5 3.5"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              Push notifications enabled. You&apos;ll hear about TP/SL hits, bot events, and trades.
             </p>
           )}
         </Section>
@@ -422,7 +456,7 @@ function NumberField(props: {
           if (clamped !== n) setDraft(String(clamped));
           props.onChange(clamped);
         }}
-        className="w-full rounded border border-line bg-ink-800 px-3 py-2 font-mono text-sm"
+        className="w-full rounded border border-line bg-ink-800 px-3 py-2 font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon"
       />
       <p className="text-[11px] text-mute">{props.hint}</p>
     </label>

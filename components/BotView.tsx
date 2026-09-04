@@ -40,6 +40,7 @@ import { safeReadScoped, removeScoped } from "@/lib/accounts";
 import { loadPositions, pnlPct } from "@/lib/positions";
 import { quoteTokenToSol } from "@/lib/token-value";
 import { CoinImage } from "./CoinImage";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { useSettings } from "./SettingsProvider";
 import { useActiveAccountId } from "./AccountsProvider";
 
@@ -74,6 +75,7 @@ export function BotView() {
   const [equityCurve, setEquityCurve] = useState<EquityPoint[]>([]);
   const [bankrollCfg, setBankrollCfg] = useState<BankrollConfig>(DEFAULT_BANKROLL_CONFIG);
   const [learning, setLearning] = useState<LearningSnapshot>(loadLearningSnapshot(null));
+  const [resetOpen, setResetOpen] = useState(false);
   const realizedLossRef = useRef<number>(0);
   const lastEquitiesRef = useRef<{ mint: string; qty: number; cost: number }[]>([]);
 
@@ -348,17 +350,14 @@ export function BotView() {
           <button
             type="button"
             onClick={exportLog}
-            className="rounded border border-line px-3 py-1.5 font-mono text-[11px] text-mute hover:border-neon hover:text-neon"
+            className="press rounded border border-line px-3 py-1.5 font-mono text-[11px] text-mute hover:border-neon hover:text-neon focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon"
           >
             Export
           </button>
           <button
             type="button"
-            onClick={() => {
-              if (!confirm("Clear stats, log, and equity curve? This is a new session.")) return;
-              resetSessionStats();
-            }}
-            className="rounded border border-line px-3 py-1.5 font-mono text-[11px] text-mute hover:border-danger hover:text-danger"
+            onClick={() => setResetOpen(true)}
+            className="press rounded border border-line px-3 py-1.5 font-mono text-[11px] text-mute hover:border-danger hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
           >
             Reset session
           </button>
@@ -635,6 +634,27 @@ export function BotView() {
           </ul>
         )}
       </section>
+
+      <ConfirmDialog
+        open={resetOpen}
+        title="Reset session stats?"
+        body={
+          <div className="space-y-1">
+            <p>
+              This clears the bot log, closed trades, equity curve, and learned state. Current
+              open positions are left in place. You cannot undo this.
+            </p>
+            <p className="text-warn">Export the activity stream first if you want a backup.</p>
+          </div>
+        }
+        confirmLabel="Reset session"
+        danger
+        onCancel={() => setResetOpen(false)}
+        onConfirm={() => {
+          resetSessionStats();
+          setResetOpen(false);
+        }}
+      />
     </div>
   );
 }

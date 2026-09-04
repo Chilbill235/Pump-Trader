@@ -4,24 +4,32 @@
 
 :root {
   color-scheme: dark;
+  --neon: #39ff88;
+  --warn: #f59e0b;
+  --danger: #ef4444;
+  --ink-950: #05060a;
+  --ink-900: #0d1017;
+  --ink-800: #141824;
+  --ink-700: #1c2230;
+  --line: #242a38;
+  --mute: #8a93a6;
 }
 
 html,
 body {
   height: 100%;
-  background: #05060a;
+  background: var(--ink-950);
   color: #e8eaed;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 body {
-  font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  font-family: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   -webkit-tap-highlight-color: transparent;
   -webkit-text-size-adjust: 100%;
   overscroll-behavior-y: contain;
-}
-
-/* Respect iOS safe areas for the sticky header / bottom sheet. */
-body {
   padding-top: env(safe-area-inset-top);
   padding-bottom: env(safe-area-inset-bottom);
 }
@@ -39,8 +47,6 @@ body {
   button {
     touch-action: manipulation;
   }
-  /* Ensure fixed/overlay modals truly cover the viewport even when the
-     browser address bar resizes. dvh is supported in iOS 15.4+ / Chrome 108+. */
   .mobile-fullscreen {
     height: 100dvh;
   }
@@ -51,23 +57,63 @@ input[type="number"]::-webkit-inner-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
+input[type="number"] {
+  -moz-appearance: textfield;
+}
 
+/* Native scrollbars across the app. */
 .scroll-thin::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
+.scroll-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
 .scroll-thin::-webkit-scrollbar-thumb {
-  background: #242a38;
+  background: #2a3142;
   border-radius: 99px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.scroll-thin::-webkit-scrollbar-thumb:hover {
+  background: #3a4358;
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2a3142 transparent;
 }
 
-/* Make the app shell container mobile-friendly by default. */
-@supports (-webkit-touch-callout: none) {
-  /* iOS-only: prevent rubber-band scroll from shifting modals. */
-  body.modal-open {
-    position: fixed;
-    width: 100%;
-  }
+/* Subtle radial backdrop for the top of every page. */
+.app-backdrop {
+  background-image:
+    radial-gradient(circle at 20% -10%, rgba(57, 255, 136, 0.06), transparent 40%),
+    radial-gradient(circle at 100% 0%, rgba(14, 165, 233, 0.05), transparent 40%);
+}
+
+/* Live pulse used everywhere. */
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+.live-pulse {
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+
+/* Ping ring used for bot status. */
+@keyframes ping-soft {
+  0% { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+.ping-soft::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: currentColor;
+  animation: ping-soft 1.6s ease-out infinite;
+  pointer-events: none;
 }
 
 /* Reusable utilities. */
@@ -79,27 +125,30 @@ input[type="number"]::-webkit-inner-spin-button {
     padding-bottom: env(safe-area-inset-bottom);
   }
   .touch-target {
-    /* Apple's HIG minimum touch target is 44x44. */
     min-height: 44px;
     min-width: 44px;
   }
   .press {
-    /* Tight mobile feedback on tap. */
-    transition: transform 80ms ease, background-color 80ms ease;
+    transition: transform 80ms ease, background-color 80ms ease, border-color 80ms ease, color 80ms ease, box-shadow 80ms ease;
   }
   .press:active {
     transform: scale(0.97);
   }
+  .text-shadow-neon {
+    text-shadow: 0 0 12px rgba(57, 255, 136, 0.6);
+  }
+  .scroll-hide::-webkit-scrollbar { display: none; }
+  .scroll-hide { scrollbar-width: none; }
 }
 
-/* Accessible focus rings on keyboard navigation without affecting mouse. */
+/* Accessible focus rings on keyboard navigation. */
 @layer base {
+  :focus { outline: none; }
   :focus-visible {
     outline: 2px solid #39ff88;
     outline-offset: 2px;
     border-radius: 4px;
   }
-  /* Don't double-up the ring on native controls we already style. */
   input:focus-visible,
   select:focus-visible,
   textarea:focus-visible {
@@ -111,28 +160,34 @@ input[type="number"]::-webkit-inner-spin-button {
     outline: 2px solid #39ff88;
     outline-offset: 2px;
   }
-}
-
-/* Subtle pulse used for "live" indicators. */
-@keyframes live-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.55; }
-}
-.live-pulse {
-  animation: live-pulse 1.6s ease-in-out infinite;
-}
-
-/* Auto-grow select / dropdowns to full width on small screens. */
-@media (max-width: 640px) {
-  .table-wrap {
-    /* Allow horizontal scroll without overflowing the viewport. */
-    -webkit-overflow-scrolling: touch;
+  /* Checkboxes: keep native ring when checked. */
+  input[type="checkbox"]:focus-visible,
+  input[type="radio"]:focus-visible {
+    box-shadow: 0 0 0 2px #39ff88;
   }
-  h1 { line-height: 1.2; }
 }
 
-/* PWA splash/standalone adjustments. */
+/* Skeleton shimmer for loading rows. */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, #1c2230 0%, #2a3142 50%, #1c2230 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+  border-radius: 4px;
+}
+
+/* PWA standalone adjustments. */
 @media all and (display-mode: standalone) {
-  /* Hide the address bar offset if the browser draws its own. */
   body { padding-top: env(safe-area-inset-top); }
+}
+
+/* Hide the broken iOS-only rubber-band from shifting modals. */
+@supports (-webkit-touch-callout: none) {
+  body.modal-open {
+    position: fixed;
+    width: 100%;
+  }
 }

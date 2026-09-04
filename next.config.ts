@@ -44,10 +44,6 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: "https",
-        hostname: "magenta.imaginative-banana.ts.net",
-      },
-      {
-        protocol: "https",
         hostname: "arweave.net",
       },
       {
@@ -63,7 +59,6 @@ const nextConfig: NextConfig = {
     optimizePackageImports: [
       "@solana/web3.js",
       "@solana/wallet-adapter-react",
-      "@solana/wallet-adapter-react-ui",
       "bn.js",
     ],
   },
