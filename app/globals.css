@@ -46,58 +46,6 @@ body {
   }
 }
 
-/* Style the "show all wallets" modal launched from the connect button. */
-.wallet-adapter-modal-wrapper {
-  background: rgba(5, 6, 10, 0.85) !important;
-  backdrop-filter: blur(4px);
-  align-items: flex-end !important;
-  z-index: 9999 !important;
-}
-@media (min-width: 640px) {
-  .wallet-adapter-modal-wrapper {
-    align-items: center !important;
-  }
-}
-
-.wallet-adapter-modal-container {
-  max-width: 100% !important;
-  border-radius: 12px 12px 0 0 !important;
-  background: #0d1017 !important;
-  color: #e8eaed !important;
-  border: 1px solid #242a38;
-  max-height: 92vh !important;
-  max-height: 92dvh !important;
-}
-@media (min-width: 640px) {
-  .wallet-adapter-modal-container {
-    border-radius: 12px !important;
-    max-width: 420px !important;
-  }
-}
-
-.wallet-adapter-modal-title {
-  color: #e8eaed !important;
-}
-
-.wallet-adapter-modal-list li {
-  background: #141824 !important;
-  color: #e8eaed !important;
-  border: 1px solid #242a38 !important;
-  border-radius: 8px !important;
-  margin-bottom: 6px !important;
-}
-.wallet-adapter-modal-list li:hover {
-  background: #1c2230 !important;
-}
-
-.wallet-adapter-modal-middle {
-  padding-bottom: env(safe-area-inset-bottom) !important;
-}
-
-.wallet-adapter-modal-button-close {
-  background: #141824 !important;
-}
-
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {
   -webkit-appearance: none;

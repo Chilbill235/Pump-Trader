@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { shortenAddress } from "@/lib/format";
 import { detectWallets, type DetectedWallet, type WalletId } from "@/lib/wallet-detect";
 
@@ -10,7 +9,6 @@ type Status = "idle" | "opening" | "installing" | "connecting";
 
 export function ConnectWalletButton({ className }: { className?: string }) {
   const { publicKey, connected, connecting, disconnect, wallet } = useWallet();
-  const { setVisible } = useWalletModal();
   const [open, setOpen] = useState(false);
   const [wallets, setWallets] = useState<DetectedWallet[]>([]);
   const [status, setStatus] = useState<Status>("idle");
@@ -74,7 +72,6 @@ export function ConnectWalletButton({ className }: { className?: string }) {
       if (w.id === "phantom") {
         const phantom = (window as Window & { solana?: { connect?: () => Promise<unknown> } }).solana;
         if (phantom?.connect) await phantom.connect();
-        setVisible(false);
         setStatus("idle");
         setOpen(false);
         return;
@@ -82,7 +79,6 @@ export function ConnectWalletButton({ className }: { className?: string }) {
       if (w.id === "solflare") {
         const solflare = (window as Window & { solflare?: { connect?: () => Promise<unknown> } }).solflare;
         if (solflare?.connect) await solflare.connect();
-        setVisible(false);
         setStatus("idle");
         setOpen(false);
         return;
@@ -105,12 +101,13 @@ export function ConnectWalletButton({ className }: { className?: string }) {
           return;
         }
       }
-      // Fallback: open the standard adapter modal so the user can pick.
-      setVisible(true);
+      // Fallback: we could not find a known wallet to talk to. The picker UI
+      // above shows install / deeplink options.
+      console.warn(`No installable handler for ${w.name}.`);
       setStatus("idle");
     } catch {
       setStatus("idle");
-      setVisible(true);
+      // Could not auto-connect. The user can try again from the picker.
     }
   }
 
@@ -190,10 +187,6 @@ export function ConnectWalletButton({ className }: { className?: string }) {
               onPickInstalled={pickInstalled}
               onDeeplink={openDeeplink}
               onInstall={openInstall}
-              onOpenStandard={() => {
-                setVisible(true);
-                setOpen(false);
-              }}
             />
           )}
         </div>
@@ -208,7 +201,6 @@ function Picker(props: {
   onPickInstalled: (w: DetectedWallet) => void;
   onDeeplink: (w: DetectedWallet) => void;
   onInstall: (w: DetectedWallet) => void;
-  onOpenStandard: () => void;
 }) {
   return (
     <div className="space-y-2">
@@ -231,13 +223,6 @@ function Picker(props: {
           </li>
         ))}
       </ul>
-      <button
-        type="button"
-        onClick={props.onOpenStandard}
-        className="press mt-2 w-full rounded border border-line bg-ink-800 px-3 py-2 text-left font-mono text-[11px] text-mute hover:border-neon hover:text-neon"
-      >
-        Show all wallets…
-      </button>
       <p className="px-1 pt-1 text-[10px] text-mute">
         Your keys never leave your wallet. We sign in the browser.
       </p>

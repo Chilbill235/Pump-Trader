@@ -1,27 +1,20 @@
 "use client";
 
-import { useMemo } from "react";
 import { ConnectionProvider, WalletProvider } from "@solana/wallet-adapter-react";
-import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
-import {
-  PhantomWalletAdapter,
-  SolflareWalletAdapter,
-} from "@solana/wallet-adapter-wallets";
 import { useSettings } from "./SettingsProvider";
-import "@solana/wallet-adapter-react-ui/styles.css";
 
+// Phantom and Solflare now self-register through the Wallet Standard
+// (`window.solana` / `window.solflare` expose a Standard Wallet). Explicitly
+// importing their adapters causes the "registered as a Standard Wallet" warning
+// and duplicate connect prompts. The ConnectWalletButton talks to those
+// providers directly; the WalletProvider just hosts the connection context.
 export function AppWalletProvider({ children }: { children: React.ReactNode }) {
   const { settings } = useSettings();
 
-  const wallets = useMemo(
-    () => [new PhantomWalletAdapter(), new SolflareWalletAdapter()],
-    [],
-  );
-
   return (
     <ConnectionProvider endpoint={settings.rpcUrl}>
-      <WalletProvider wallets={wallets} autoConnect>
-        <WalletModalProvider>{children}</WalletModalProvider>
+      <WalletProvider wallets={[]} autoConnect>
+        {children}
       </WalletProvider>
     </ConnectionProvider>
   );
