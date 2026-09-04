@@ -212,7 +212,7 @@ export function StartBotModal({ open, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-[90] flex items-stretch justify-center overflow-hidden bg-black/80 sm:items-center sm:p-4"
+      className="fixed inset-0 z-[90] flex items-stretch justify-center overflow-hidden bg-ink-950/85 backdrop-blur-sm sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="start-bot-title"
@@ -220,10 +220,18 @@ export function StartBotModal({ open, onClose }: Props) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="flex w-full max-w-lg flex-col rounded-t-xl border border-line bg-ink-900 shadow-2xl sm:rounded-xl">
-        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line bg-ink-800 px-4 py-3">
+      <div className="relative flex w-full max-w-lg flex-col overflow-hidden rounded-t-xl border border-line glass-strong shadow-2xl sm:rounded-xl">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -top-24 -right-24 h-44 w-44 rounded-full bg-neon/15 blur-3xl"
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -bottom-20 -left-20 h-36 w-36 rounded-full bg-info/10 blur-3xl"
+        />
+        <div className="relative flex shrink-0 items-start justify-between gap-3 border-b border-line-soft bg-ink-850/80 px-4 py-3 backdrop-blur">
           <div>
-            <h2 id="start-bot-title" className="font-mono text-sm tracking-wide text-neon">
+            <h2 id="start-bot-title" className="font-mono text-sm font-semibold tracking-widest text-neon">
               START AUTO-TRADE BOT
             </h2>
             <p className="mt-0.5 text-[11px] text-mute">
@@ -234,7 +242,7 @@ export function StartBotModal({ open, onClose }: Props) {
           <button
             type="button"
             onClick={onClose}
-            className="press shrink-0 rounded border border-line p-1 text-mute hover:border-danger hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
+            className="press shrink-0 rounded-md border border-line bg-ink-800 p-1 text-mute hover:border-danger hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
             aria-label="Close"
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
@@ -246,37 +254,40 @@ export function StartBotModal({ open, onClose }: Props) {
         <div
           ref={panelRef}
           tabIndex={-1}
-          className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 scroll-thin"
+          className="relative min-h-0 flex-1 space-y-4 overflow-y-auto p-4 scroll-thin"
         >
-          <section className="rounded border border-line bg-ink-800 p-3">
+          <section className="relative overflow-hidden rounded-xl border border-line bg-ink-900 p-3">
             <header className="flex items-center justify-between">
-              <h3 className="font-mono text-[11px] uppercase tracking-wide text-mute">
+              <h3 className="font-mono text-[10px] uppercase tracking-widest text-mute">
                 Wallet balance
               </h3>
               {solUsd != null ? (
-                <span className="font-mono text-[11px] text-mute">SOL ≈ ${solUsd.toFixed(2)}</span>
+                <span className="font-mono text-[11px] text-mute">SOL ≈ <span className="text-info">${solUsd.toFixed(2)}</span></span>
               ) : (
                 <span className="font-mono text-[11px] text-mute">SOL price …</span>
               )}
             </header>
-            <p className="mt-1 break-all font-mono text-base">
+            <p className="mt-1 break-all font-mono text-base text-white">
               {walletMissing ? (
                 <span className="text-warn">Wallet not connected — connect to start.</span>
               ) : balanceSol == null ? (
                 "—"
               ) : (
                 <>
-                  {balanceSol.toFixed(4)} SOL
-                  {solUsd != null ? ` ≈ $${(balanceSol * solUsd).toFixed(2)}` : null}
+                  <span className="text-neon">{balanceSol.toFixed(4)}</span>{" "}
+                  <span className="text-mute">SOL</span>
+                  {solUsd != null ? (
+                    <span className="text-mute"> ≈ <span className="text-info">${(balanceSol * solUsd).toFixed(2)}</span></span>
+                  ) : null}
                 </>
               )}
             </p>
             {gateError ? (
-              <p className="mt-2 rounded border border-danger/40 bg-danger/5 p-2 text-[11px] text-danger">
+              <p className="mt-2 rounded-md border border-danger/40 bg-danger/5 p-2 text-[11px] text-danger">
                 {gateError}
               </p>
             ) : balanceSol != null && solUsd != null && !walletMissing ? (
-              <p className="mt-2 rounded border border-neon/40 bg-neon/5 p-2 text-[11px] text-neon">
+              <p className="mt-2 rounded-md border border-neon/40 bg-neon/5 p-2 text-[11px] text-neon">
                 Balance OK. Bot can start.
               </p>
             ) : null}
@@ -289,10 +300,10 @@ export function StartBotModal({ open, onClose }: Props) {
                   type="button"
                   key={h}
                   onClick={() => setDurationH(h)}
-                  className={`press rounded border px-3 py-1 font-mono text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon ${
+                  className={`press rounded-md px-3 py-1.5 font-mono text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon ${
                     durationH === h
-                      ? "border-neon text-neon"
-                      : "border-line text-mute hover:border-neon/60"
+                      ? "border border-neon/50 bg-neon/10 text-neon"
+                      : "border border-line bg-ink-850 text-mute hover:border-neon/60"
                   }`}
                 >
                   {h}h
@@ -363,7 +374,11 @@ export function StartBotModal({ open, onClose }: Props) {
           </Section>
 
           <Section title="Mode">
-            <label className="flex items-start gap-3 rounded border border-line bg-ink-800 p-3">
+            <label className={`flex items-start gap-3 rounded-md border p-3 transition-colors ${
+              simulate
+                ? "border-neon/30 bg-neon/5"
+                : "border-danger/30 bg-danger/5"
+            }`}>
               <input
                 type="checkbox"
                 checked={simulate}
@@ -371,25 +386,27 @@ export function StartBotModal({ open, onClose }: Props) {
                 className="mt-1 h-4 w-4 accent-neon"
               />
               <span>
-                <span className="block text-sm">Simulate / paper mode</span>
+                <span className="block text-sm text-white">Simulate / paper mode</span>
                 <span className="block text-xs text-mute">
                   OFF → bot trades REAL SOL on mainnet using your connected wallet.
                 </span>
               </span>
             </label>
             {live ? (
-              <p className="mt-2 rounded border border-danger/40 bg-danger/10 p-2 text-[11px] text-danger">
+              <p className="mt-2 rounded-md border border-danger/40 bg-danger/10 p-2 text-[11px] text-danger">
+                <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-danger align-middle live-pulse" />
                 LIVE mode. Real SOL will be spent. The wallet still has to sign every transaction —
                 keep Phantom open.
               </p>
             ) : (
-              <p className="mt-2 rounded border border-warn/40 bg-warn/10 p-2 text-[11px] text-warn">
+              <p className="mt-2 rounded-md border border-warn/40 bg-warn/10 p-2 text-[11px] text-warn">
+                <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-warn align-middle live-pulse" />
                 SIMULATE mode. No transaction is broadcast. Use this for tuning.
               </p>
             )}
           </Section>
 
-          <label className="flex items-start gap-3 rounded border border-line bg-ink-800 p-3">
+          <label className="flex items-start gap-3 rounded-md border border-line bg-ink-900 p-3">
             <input
               type="checkbox"
               checked={confirmAck}
@@ -404,7 +421,7 @@ export function StartBotModal({ open, onClose }: Props) {
           </label>
         </div>
 
-        <div className="sticky bottom-0 flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-line bg-ink-800 px-4 py-3">
+        <div className="sticky bottom-0 flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-line-soft bg-ink-850/90 px-4 py-3 backdrop-blur">
           <p className="mr-auto max-w-[60%] font-mono text-[11px] text-mute">
             {!wallet.connected
               ? "Connect wallet to start."
@@ -419,7 +436,7 @@ export function StartBotModal({ open, onClose }: Props) {
           <button
             type="button"
             onClick={onClose}
-            className="press rounded border border-line px-3 py-1.5 font-mono text-xs text-mute hover:border-danger hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
+            className="press rounded-md border border-line bg-ink-800 px-3 py-1.5 font-mono text-xs text-mute hover:border-danger hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
           >
             Cancel
           </button>
@@ -427,7 +444,11 @@ export function StartBotModal({ open, onClose }: Props) {
             type="button"
             onClick={() => void start()}
             disabled={busy || !canStart}
-            className="press rounded bg-neon px-4 py-1.5 font-mono text-xs text-ink-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon disabled:opacity-40"
+            className={`press relative overflow-hidden rounded-md border px-4 py-1.5 font-mono text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 disabled:opacity-40 ${
+              live
+                ? "border-danger/50 bg-gradient-to-r from-danger to-rose-400 text-white focus-visible:ring-danger"
+                : "border-neon/50 bg-gradient-to-r from-neon to-emerald-400 text-ink-950 focus-visible:ring-neon"
+            }`}
           >
             {busy
               ? "Starting…"
@@ -448,7 +469,7 @@ export function StartBotModal({ open, onClose }: Props) {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h3 className="mb-2 font-mono text-[11px] uppercase tracking-wide text-mute">{title}</h3>
+      <h3 className="mb-2 font-mono text-[10px] uppercase tracking-widest text-mute">{title}</h3>
       {children}
     </div>
   );
@@ -469,7 +490,7 @@ function Field({
 }) {
   return (
     <label className="block space-y-1">
-      <span className="font-mono text-[11px] uppercase text-mute">{label}</span>
+      <span className="font-mono text-[10px] uppercase tracking-widest text-mute">{label}</span>
       <input
         type="number"
         value={value}
@@ -489,7 +510,7 @@ function Field({
           const n = Number(e.target.value);
           if (Number.isFinite(n) && n < min) onChange(min);
         }}
-        className="w-full rounded border border-line bg-ink-800 px-3 py-1.5 font-mono text-sm"
+        className="w-full rounded-md border border-line bg-ink-850 px-3 py-1.5 font-mono text-sm focus:border-neon focus:bg-ink-900 focus:outline-none"
       />
     </label>
   );

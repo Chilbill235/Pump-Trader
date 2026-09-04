@@ -459,115 +459,125 @@ export function WatchView() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-mono text-lg tracking-wide">Watch</h1>
-          <p className="text-xs text-mute">
+          <h1 className="text-xl font-semibold sm:text-2xl">
+            <span className="text-gradient-cool">Watch</span>
+          </h1>
+          <p className="max-w-xl text-xs text-mute sm:text-sm">
             {settings.autoTrade
               ? "AUTO-TRADE ON. Pipeline auto-buys scoring candidates. Keep wallet open."
               : "MONITOR → AUDITOR → NARRATIVE → TIMING → CHECKER → you approve → EXECUTOR. Default stance is NO."}
           </p>
         </div>
-        <div className="flex items-center gap-2 font-mono text-[11px] text-mute">
+        <div className="flex flex-wrap items-center gap-2 font-mono text-[11px] text-mute">
           <span
-            className={`rounded border px-2 py-0.5 ${
+            className={`rounded-md border px-2 py-0.5 ${
               settings.pipelineEnabled
-                ? "border-neon/40 text-neon"
-                : "border-line text-mute"
+                ? "border-neon/40 bg-neon/10 text-neon"
+                : "border-line bg-ink-850 text-mute"
             }`}
           >
             {settings.pipelineEnabled ? "PIPELINE ON" : "PIPELINE OFF"}
           </span>
-          <span>{lastPoll ? `poll ${timeAgo(lastPoll)}` : "waiting"}</span>
-          <span>
-            {coins.length} launches · {candidates.length} queued · {skipped.length} skipped
+          <span className="rounded-md border border-line bg-ink-850 px-2 py-0.5">
+            {lastPoll ? `poll ${timeAgo(lastPoll)}` : "waiting"}
+          </span>
+          <span className="rounded-md border border-line bg-ink-850 px-2 py-0.5">
+            {coins.length} launches · <span className="text-neon">{candidates.length}</span> queued · {skipped.length} skipped
           </span>
         </div>
       </div>
 
       {source ? (
-        <p className="truncate font-mono text-[11px] text-mute">source: {source}</p>
+        <p className="truncate rounded-md border border-line bg-ink-850 px-2 py-1 font-mono text-[11px] text-mute">source: {source}</p>
       ) : null}
       {error ? (
-        <div className="rounded border border-danger/40 bg-danger/10 p-3 text-sm text-danger">
+        <div className="rounded-md border border-danger/40 bg-danger/5 p-3 text-sm text-danger">
           <div className="font-medium">Launch stream error</div>
           <p className="mt-1 font-mono text-xs">{error}</p>
         </div>
       ) : null}
       {actionError ? (
-        <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded bg-danger/10 p-2 font-mono text-[11px] text-danger">
+        <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-md border border-danger/40 bg-danger/5 p-2 font-mono text-[11px] text-danger">
           {actionError}
         </pre>
       ) : null}
-      {receiptNote ? <p className="text-xs text-neon">{receiptNote}</p> : null}
+      {receiptNote ? <p className="rounded-md border border-neon/30 bg-neon/5 px-2 py-1 text-xs text-neon">{receiptNote}</p> : null}
 
       {popping.length > 0 ? (
-        <section className="rounded border border-warn/40 bg-warn/5 p-3">
-          <header className="mb-2 flex items-center justify-between">
-            <h2 className="font-mono text-xs uppercase tracking-wide text-warn">
-              Popping right now · {popping.length}
-            </h2>
-            <p className="font-mono text-[11px] text-mute">
-              Largest mc / trade density gain in the last ~90s. Click to inspect.
-            </p>
-          </header>
-          <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {popping.map((m) => (
-              <li
-                key={m.mint}
-                className="flex items-center gap-2 rounded border border-warn/30 bg-ink-900 p-2"
-              >
-                <CoinImage src={m.imageUri ?? null} alt={m.symbol} size={28} />
-                <div className="min-w-0 flex-1">
-                  <Link
-                    href={`/coin/${m.mint}`}
-                    className="block truncate text-sm hover:text-neon"
-                  >
-                    {m.name}{" "}
-                    <span className="font-mono text-[11px] text-mute">{m.symbol}</span>
-                  </Link>
-                  <p className="font-mono text-[11px] text-mute">
-                    +{m.deltaPct.toFixed(1)}% mc · {m.recentTrades} trades · score {(m.score * 100).toFixed(0)}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ul>
+        <section className="relative overflow-hidden rounded-xl border border-warn/40 bg-ink-900 p-3">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -top-12 -right-12 h-32 w-32 rounded-full bg-warn/10 blur-3xl"
+          />
+          <div className="relative">
+            <header className="mb-2 flex items-center justify-between">
+              <h2 className="font-mono text-xs uppercase tracking-widest text-warn">
+                Popping right now · {popping.length}
+              </h2>
+              <p className="font-mono text-[11px] text-mute">
+                Largest mc / trade density gain in the last ~90s. Click to inspect.
+              </p>
+            </header>
+            <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {popping.map((m) => (
+                <li
+                  key={m.mint}
+                  className="press flex items-center gap-2 rounded-md border border-warn/30 bg-ink-850 p-2 transition-colors hover:border-warn hover:bg-ink-800"
+                >
+                  <CoinImage src={m.imageUri ?? null} alt={m.symbol} size={28} />
+                  <div className="min-w-0 flex-1">
+                    <Link
+                      href={`/coin/${m.mint}`}
+                      className="block truncate text-sm hover:text-neon"
+                    >
+                      {m.name}{" "}
+                      <span className="font-mono text-[11px] text-mute">{m.symbol}</span>
+                    </Link>
+                    <p className="font-mono text-[11px] text-mute">
+                      <span className="text-warn">+{m.deltaPct.toFixed(1)}%</span> mc · {m.recentTrades} trades · score {(m.score * 100).toFixed(0)}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
         </section>
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-        <section className="rounded border border-line bg-ink-800">
-          <header className="border-b border-line px-3 py-2">
-            <h2 className="font-mono text-xs uppercase tracking-wide text-mute">
+        <section className="overflow-hidden rounded-xl border border-line bg-ink-900">
+          <header className="border-b border-line-soft bg-ink-850/80 px-3 py-2 backdrop-blur">
+            <h2 className="font-mono text-xs uppercase tracking-widest text-mute">
               Launch stream (newest)
             </h2>
           </header>
           {loading && coins.length === 0 ? (
             <p className="p-6 text-center text-sm text-mute">Polling newest launches…</p>
           ) : (
-            <ul className="max-h-[70vh] overflow-auto scroll-thin divide-y divide-line">
+            <ul className="max-h-[70vh] divide-y divide-line-soft overflow-auto scroll-thin">
               {coins.map((c) => {
                 const age = ageMinutesOf(c);
                 const pct = bondingCurvePctOf(c);
                 return (
-                  <li key={c.mint} className="flex items-center gap-2 px-3 py-2">
+                  <li key={c.mint} className="group flex items-center gap-2 px-3 py-2 transition-colors hover:bg-ink-850/60">
                     {c.imageUri ? (
-                      <CoinImage src={c.imageUri} alt={c.symbol} size={28} />
+                      <CoinImage src={c.imageUri} alt={c.symbol} size={28} className="shadow-neon-sm" />
                     ) : (
                       <div className="h-7 w-7 rounded bg-ink-700" />
                     )}
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm">
                         {c.name}{" "}
-                        <span className="font-mono text-[11px] text-mute">{c.symbol}</span>
+                        <span className="font-mono text-[11px] text-mute">${c.symbol}</span>
                       </div>
                       <div className="font-mono text-[11px] text-mute">
-                        {formatAge(age)} · curve {pct.toFixed(1)}%
+                        {formatAge(age)} · curve <span className="text-neon">{pct.toFixed(1)}%</span>
                         {c.complete ? " · graduated" : ""}
                       </div>
                     </div>
                     <Link
                       href={`/coin/${c.mint}`}
-                      className="font-mono text-[11px] text-mute hover:text-neon"
+                      className="press rounded-md border border-line bg-ink-850 px-2 py-1 font-mono text-[11px] text-mute opacity-0 transition-colors group-hover:border-neon group-hover:text-neon group-hover:opacity-100 sm:opacity-100"
                     >
                       open
                     </Link>
@@ -580,15 +590,15 @@ export function WatchView() {
 
         <section className="space-y-3">
           <header>
-            <h2 className="font-mono text-xs uppercase tracking-wide text-mute">
-              Candidates — human approval required
+            <h2 className="font-mono text-xs uppercase tracking-widest text-mute">
+              Candidates — <span className="text-warn">human approval required</span>
             </h2>
             <p className="text-[11px] text-mute">
               Checker speaks first. Score clearing the bar is not a buy signal.
             </p>
           </header>
           {candidates.length === 0 ? (
-            <div className="rounded border border-line bg-ink-800 p-6 text-center text-sm text-mute">
+            <div className="rounded-xl border border-dashed border-line bg-ink-850 p-6 text-center text-sm text-mute">
               No candidates. The watcher is skipping until something clears the filter and the
               score bar — and even then you have to approve.
             </div>
@@ -607,23 +617,23 @@ export function WatchView() {
         </section>
       </div>
 
-      <section className="rounded border border-line bg-ink-800">
+      <section className="overflow-hidden rounded-xl border border-line bg-ink-900">
         <button
           type="button"
-          className="flex w-full items-center justify-between px-3 py-2 font-mono text-xs uppercase text-mute"
+          className="flex w-full items-center justify-between px-3 py-2 font-mono text-xs uppercase tracking-widest text-mute transition-colors hover:bg-ink-850"
           onClick={() => setSkippedOpen((v) => !v)}
         >
           <span>Skipped ({skipped.length})</span>
-          <span>{skippedOpen ? "hide" : "show"}</span>
+          <span className="rounded border border-line bg-ink-850 px-1.5 py-0.5 text-mute">{skippedOpen ? "hide" : "show"}</span>
         </button>
         {skippedOpen ? (
-          <ul className="max-h-72 overflow-auto scroll-thin divide-y divide-line border-t border-line">
+          <ul className="max-h-72 divide-y divide-line-soft overflow-auto scroll-thin border-t border-line-soft">
             {skipped.slice(0, 80).map((e, i) => (
               <li key={`${e.mint}-${e.timestamp}-${i}`} className="px-3 py-2 text-xs">
                 <div className="flex flex-wrap items-baseline gap-2">
                   <span className="font-medium">{e.name}</span>
-                  <span className="font-mono text-mute">{e.symbol}</span>
-                  <span className="rounded bg-ink-700 px-1.5 py-0.5 font-mono text-[10px] uppercase text-warn">
+                  <span className="font-mono text-mute">${e.symbol}</span>
+                  <span className="rounded-md border border-warn/30 bg-warn/5 px-1.5 py-0.5 font-mono text-[10px] uppercase text-warn">
                     {e.stage}
                   </span>
                   <span className="font-mono text-[10px] text-mute">{timeAgo(e.timestamp)}</span>

@@ -120,14 +120,28 @@ export function LoginScreen() {
 
   return (
     <div className="relative grid min-h-screen place-items-center overflow-hidden bg-ink-950 px-4 py-8 text-zinc-100 app-backdrop">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-32 left-1/2 h-[420px] w-[420px] -translate-x-1/2 rounded-full bg-neon/15 blur-[120px]"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -bottom-32 right-1/4 h-[320px] w-[320px] rounded-full bg-info/10 blur-[100px]"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 grid-bg opacity-30"
+      />
       <div className="relative w-full max-w-md space-y-4">
         <div className="text-center">
-          <p className="inline-flex items-center gap-2 rounded-full border border-line bg-ink-800/60 px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-mute">
+          <p className="inline-flex items-center gap-2 rounded-full border border-neon/30 bg-neon/5 px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-neon">
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-neon live-pulse" />
             Local · Encrypted · No server
           </p>
-          <h1 className="mt-3 font-mono text-2xl tracking-widest text-neon">PUMP TRADER</h1>
-          <p className="mt-1 text-xs text-mute">
+          <h1 className="mt-3 text-2xl font-semibold tracking-widest sm:text-3xl">
+            <span className="text-gradient">PUMP</span> <span className="text-white">TRADER</span>
+          </h1>
+          <p className="mx-auto mt-2 max-w-sm text-xs text-mute sm:text-sm">
             Local multi-account dashboard. Everything is stored only in this browser. No server, no
             account on a server. Each account gets its own positions, settings, bot, and history —
             one account cannot read or stop another.
@@ -135,10 +149,14 @@ export function LoginScreen() {
         </div>
 
         {existingAccounts.length > 0 ? (
-          <div className="flex rounded-lg border border-line bg-ink-800 p-1 font-mono text-xs">
+          <div className="flex rounded-lg border border-line bg-ink-850 p-1 font-mono text-xs">
             <button
               type="button"
-              className={`press flex-1 rounded-md px-3 py-2 ${mode === "unlock" ? "bg-ink-700 text-white" : "text-mute"}`}
+              className={`press flex-1 rounded-md px-3 py-2 ${
+                mode === "unlock"
+                  ? "border border-neon/40 bg-neon/10 text-neon shadow-[inset_0_0_0_1px_rgba(57,255,136,0.3)]"
+                  : "text-mute hover:text-white"
+              }`}
               onClick={() => {
                 setMode("unlock");
                 setError(null);
@@ -148,7 +166,11 @@ export function LoginScreen() {
             </button>
             <button
               type="button"
-              className={`press flex-1 rounded-md px-3 py-2 ${mode === "create" ? "bg-ink-700 text-white" : "text-mute"}`}
+              className={`press flex-1 rounded-md px-3 py-2 ${
+                mode === "create"
+                  ? "border border-info/40 bg-info/10 text-info shadow-[inset_0_0_0_1px_rgba(72,167,255,0.3)]"
+                  : "text-mute hover:text-white"
+              }`}
               onClick={() => {
                 setMode("create");
                 setError(null);
@@ -159,10 +181,18 @@ export function LoginScreen() {
           </div>
         ) : null}
 
-        <form onSubmit={submit} className="space-y-3 rounded-xl border border-line bg-ink-800/90 p-4 shadow-2xl backdrop-blur">
+        <form
+          onSubmit={submit}
+          className="relative space-y-3 overflow-hidden rounded-xl border border-line glass-strong p-4 shadow-2xl"
+        >
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -top-16 -right-16 h-36 w-36 rounded-full bg-neon/10 blur-3xl"
+          />
+          <div className="relative space-y-3">
           {mode === "unlock" ? (
             <div className="space-y-2">
-              <span className="block font-mono text-[11px] uppercase text-mute">Account</span>
+              <span className="block font-mono text-[10px] uppercase tracking-widest text-mute">Account</span>
               <ul className="grid grid-cols-2 gap-2">
                 {existingAccounts.map((a) => {
                   const active = selectedId === a.id;
@@ -177,8 +207,8 @@ export function LoginScreen() {
                         }}
                         className={`press w-full rounded-lg border px-2 py-2 text-left transition-colors ${
                           active
-                            ? "border-neon bg-neon/10 text-neon"
-                            : "border-line bg-ink-900 text-mute hover:border-neon/60"
+                            ? "border-neon bg-neon/10 text-neon shadow-[inset_0_0_0_1px_rgba(57,255,136,0.3)]"
+                            : "border-line bg-ink-850 text-mute hover:border-neon/60"
                         }`}
                       >
                         <p className="truncate text-sm">@{a.username}</p>
@@ -195,13 +225,13 @@ export function LoginScreen() {
 
           {mode === "create" ? (
             <label className="block">
-              <span className="block font-mono text-[11px] uppercase text-mute">Username</span>
+              <span className="block font-mono text-[10px] uppercase tracking-widest text-mute">Username</span>
               <input
                 ref={usernameRef}
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="e.g. alice"
-                className="mt-1 w-full rounded-lg border border-line bg-ink-900 px-3 py-2 font-mono text-sm"
+                className="mt-1 w-full rounded-lg border border-line bg-ink-850 px-3 py-2.5 font-mono text-sm focus:border-neon focus:outline-none"
                 maxLength={24}
                 autoComplete="username"
               />
@@ -209,7 +239,7 @@ export function LoginScreen() {
           ) : null}
 
           <label className="block">
-            <span className="flex items-center justify-between font-mono text-[11px] uppercase text-mute">
+            <span className="flex items-center justify-between font-mono text-[10px] uppercase tracking-widest text-mute">
               <span>{mode === "create" ? "Create a PIN" : "PIN"}</span>
               {pin.length > 0 ? (
                 <button
@@ -232,20 +262,24 @@ export function LoginScreen() {
               }}
               minLength={4}
               maxLength={64}
-              className="mt-1 w-full rounded-lg border border-line bg-ink-900 px-3 py-2 font-mono text-sm"
+              className="mt-1 w-full rounded-lg border border-line bg-ink-850 px-3 py-2.5 font-mono text-sm focus:border-neon focus:outline-none"
               aria-describedby="pin-strength"
             />
             {mode === "create" && pin.length > 0 ? (
-              <div id="pin-strength" className="mt-1 flex items-center gap-2">
+              <div id="pin-strength" className="mt-1.5 flex items-center gap-2">
                 <div className="flex h-1 flex-1 gap-1">
                   {[1, 2, 3, 4].map((i) => (
                     <div
                       key={i}
-                      className={`flex-1 rounded ${i <= strength.score ? strength.color : "bg-ink-700"}`}
+                      className={`flex-1 rounded transition-colors ${
+                        i <= strength.score ? strength.color : "bg-ink-700"
+                      }`}
                     />
                   ))}
                 </div>
-                <span className="font-mono text-[10px] uppercase text-mute">{strength.label}</span>
+                <span className="font-mono text-[10px] uppercase tracking-widest text-mute">
+                  {strength.label}
+                </span>
               </div>
             ) : null}
             {mode === "unlock" ? (
@@ -255,7 +289,7 @@ export function LoginScreen() {
 
           {mode === "create" ? (
             <label className="block">
-              <span className="block font-mono text-[11px] uppercase text-mute">Confirm PIN</span>
+              <span className="block font-mono text-[10px] uppercase tracking-widest text-mute">Confirm PIN</span>
               <input
                 type={showPin ? "text" : "password"}
                 autoComplete="off"
@@ -266,7 +300,7 @@ export function LoginScreen() {
                 }}
                 minLength={4}
                 maxLength={64}
-                className="mt-1 w-full rounded-lg border border-line bg-ink-900 px-3 py-2 font-mono text-sm"
+                className="mt-1 w-full rounded-lg border border-line bg-ink-850 px-3 py-2.5 font-mono text-sm focus:border-neon focus:outline-none"
               />
             </label>
           ) : null}
@@ -283,7 +317,7 @@ export function LoginScreen() {
           <button
             type="submit"
             disabled={busy}
-            className="press w-full rounded-lg bg-neon py-2.5 font-mono text-sm font-semibold text-ink-950 disabled:opacity-40"
+            className="press relative w-full overflow-hidden rounded-lg border border-neon/50 bg-gradient-to-r from-neon to-emerald-400 py-3 font-mono text-sm font-semibold text-ink-950 shadow-[0_0_18px_-4px_rgba(57,255,136,0.5)] disabled:opacity-40"
           >
             {busy ? (
               <span className="inline-flex items-center gap-2">
@@ -301,17 +335,19 @@ export function LoginScreen() {
             <button
               type="button"
               onClick={() => setDeleteTarget(selectedId)}
-              className="press w-full rounded-lg border border-line bg-ink-900 px-3 py-1.5 font-mono text-[11px] text-mute hover:border-danger hover:text-danger"
+              className="press w-full rounded-lg border border-line bg-ink-850 px-3 py-1.5 font-mono text-[11px] text-mute hover:border-danger hover:text-danger"
             >
               Delete this account
             </button>
           ) : null}
+          </div>
         </form>
 
         {existingAccounts.length > 0 ? (
-          <details className="rounded-xl border border-line bg-ink-800/60 p-3 text-xs text-mute">
-            <summary className="press cursor-pointer list-none font-mono text-[11px] uppercase tracking-wide">
-              Accounts on this device ({existingAccounts.length})
+          <details className="rounded-xl border border-line bg-ink-850 p-3 text-xs text-mute">
+            <summary className="press flex cursor-pointer list-none items-center justify-between font-mono text-[10px] uppercase tracking-widest">
+              <span>Accounts on this device ({existingAccounts.length})</span>
+              <span className="text-mute">show</span>
             </summary>
             <ul className="mt-2 space-y-1">
               {existingAccounts.map((a) => (
@@ -330,7 +366,7 @@ export function LoginScreen() {
           </details>
         ) : null}
 
-        <p className="text-center text-[11px] text-mute">
+        <p className="rounded-lg border border-warn/30 bg-warn/5 px-3 py-2 text-center text-[11px] text-warn">
           Not financial advice. Most pump.fun coins go to zero. You are responsible for every trade.
         </p>
       </div>

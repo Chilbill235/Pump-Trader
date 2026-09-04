@@ -340,8 +340,10 @@ export function BotView() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-mono text-lg tracking-wide">Bot</h1>
-          <p className="text-xs text-mute">
+          <h1 className="text-xl font-semibold sm:text-2xl">
+            <span className="text-gradient">Bot</span>
+          </h1>
+          <p className="max-w-2xl text-xs text-mute sm:text-sm">
             Real-time P&amp;L, equity curve, kill-switch, and full activity stream. Bankroll
             protection auto-stops the bot on drawdown or session loss. Scoped to this account only.
           </p>
@@ -350,14 +352,14 @@ export function BotView() {
           <button
             type="button"
             onClick={exportLog}
-            className="press rounded border border-line px-3 py-1.5 font-mono text-[11px] text-mute hover:border-neon hover:text-neon focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon"
+            className="press rounded-md border border-line bg-ink-850 px-3 py-1.5 font-mono text-[11px] text-mute hover:border-neon hover:text-neon focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon"
           >
             Export
           </button>
           <button
             type="button"
             onClick={() => setResetOpen(true)}
-            className="press rounded border border-line px-3 py-1.5 font-mono text-[11px] text-mute hover:border-danger hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
+            className="press rounded-md border border-line bg-ink-850 px-3 py-1.5 font-mono text-[11px] text-mute hover:border-danger hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
           >
             Reset session
           </button>
@@ -413,9 +415,9 @@ export function BotView() {
         />
       </div>
 
-      <section className="rounded border border-line bg-ink-800 p-3">
-        <header className="mb-2 flex items-center justify-between">
-          <h2 className="font-mono text-[11px] uppercase tracking-wide text-mute">
+      <section className="overflow-hidden rounded-xl border border-line glass">
+        <header className="flex items-center justify-between border-b border-line-soft bg-ink-850/80 px-3 py-2 backdrop-blur">
+          <h2 className="font-mono text-[11px] uppercase tracking-widest text-mute">
             Bankroll protection
           </h2>
           <label className="flex items-center gap-2 font-mono text-[11px] text-mute">
@@ -428,6 +430,7 @@ export function BotView() {
             enabled
           </label>
         </header>
+        <div className="space-y-2 p-3">
         <div className="grid gap-3 sm:grid-cols-3">
           <CfgField
             label="Equity floor (SOL)"
@@ -454,65 +457,72 @@ export function BotView() {
             onChange={(v) => updateCfg({ maxLossPerSessionSol: v })}
           />
         </div>
-        <p className="mt-2 text-[11px] text-mute">
+        <p className="text-[11px] text-mute">
           When the bot is running, equity dropping below the floor, drawdown exceeding the cap, or
-          session realized loss exceeding the cap → bot auto-stops and logs the reason. You still
           control TP/SL per position in the Positions view.
         </p>
+        </div>
       </section>
 
       <LearningPanel snap={learning} />
 
       {session ? (
-        <div className="rounded border border-line bg-ink-800 p-3 font-mono text-[11px]">
-          <p className="text-mute">SESSION</p>
-          <p>
-            Started {new Date(session.startedAt).toLocaleString()} · {session.simulate ? "SIMULATE" : "LIVE"} ·{" "}
-            {session.maxTrades ?? "∞"} trades cap · {session.perCoinCapSol ?? "?"} SOL per coin · slippage{" "}
-            {session.slippage ?? "?"}% · TP {session.tpPct ?? "?"}% · SL {session.slPct ?? "?"}% · daily loss cap{" "}
-            {session.dailyLossSol ?? "?"} SOL
-          </p>
+        <div className="relative overflow-hidden rounded-xl border border-line glass">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -top-12 -right-12 h-32 w-32 rounded-full bg-info/10 blur-3xl"
+          />
+          <div className="relative space-y-1 p-3 font-mono text-[11px]">
+            <p className="text-[10px] uppercase tracking-widest text-mute">SESSION</p>
+            <p className="text-white">
+              Started {new Date(session.startedAt).toLocaleString()} · {session.simulate ? "SIMULATE" : "LIVE"} ·{" "}
+              {session.maxTrades ?? "∞"} trades cap · {session.perCoinCapSol ?? "?"} SOL per coin · slippage{" "}
+              {session.slippage ?? "?"}% · TP {session.tpPct ?? "?"}% · SL {session.slPct ?? "?"}% · daily loss cap{" "}
+              {session.dailyLossSol ?? "?"} SOL
+            </p>
+          </div>
         </div>
       ) : null}
 
       {equityCurve.length > 1 ? (
         <EquityCurve points={equityCurve} />
       ) : (
-        <div className="rounded border border-line bg-ink-800 p-6 text-center text-sm text-mute">
+        <div className="rounded-xl border border-dashed border-line bg-ink-850 p-6 text-center text-sm text-mute">
           Equity curve will appear after ~30 seconds of bot activity. Run the bot to populate it.
         </div>
       )}
 
-      <section className="rounded border border-line bg-ink-800">
-        <header className="border-b border-line px-3 py-2">
-          <h2 className="font-mono text-xs uppercase tracking-wide text-mute">
-            Open positions · {positionsPnl.length}
+      <section className="overflow-hidden rounded-xl border border-line bg-ink-900">
+        <header className="border-b border-line-soft bg-ink-850/80 px-3 py-2 backdrop-blur">
+          <h2 className="font-mono text-xs uppercase tracking-widest text-mute">
+            Open positions · <span className="text-neon">{positionsPnl.length}</span>
           </h2>
         </header>
         {positionsPnl.length === 0 ? (
           <p className="p-6 text-center text-sm text-mute">No local positions.</p>
         ) : (
-          <ul className="divide-y divide-line">
+          <ul className="divide-y divide-line-soft">
             {positionsPnl.map((p) => (
-              <li key={p.mint} className="flex items-center gap-3 px-3 py-2">
-                <CoinImage src={undefined} alt={p.symbol} size={28} />
+              <li key={p.mint} className="flex items-center gap-3 px-3 py-2 transition-colors hover:bg-ink-850/60">
+                <CoinImage src={undefined} alt={p.symbol} size={28} className="shadow-neon-sm" />
                 <div className="min-w-0 flex-1">
                   <Link href={`/coin/${p.mint}`} className="hover:text-neon">
-                    {p.name} <span className="font-mono text-xs text-mute">{p.symbol}</span>
+                    {p.name} <span className="font-mono text-xs text-mute">${p.symbol}</span>
                   </Link>
                   <div className="font-mono text-[11px] text-mute">
-                    cost {p.costSol.toFixed(4)} SOL · value {p.valueSol == null ? "…" : `${p.valueSol.toFixed(4)} SOL`}
+                    cost <span className="text-white">{p.costSol.toFixed(4)}</span> SOL · value{" "}
+                    {p.valueSol == null ? "…" : <span className="text-white">{p.valueSol.toFixed(4)}</span>} SOL
                   </div>
                 </div>
                 <span
-                  className={`font-mono text-xs ${
+                  className={`rounded-md border px-1.5 py-0.5 font-mono text-xs ${
                     p.pnlPct == null
-                      ? "text-mute"
+                      ? "border-line bg-ink-850 text-mute"
                       : p.pnlPct > 0
-                        ? "text-neon"
+                        ? "border-neon/30 bg-neon/5 text-neon"
                         : p.pnlPct < 0
-                          ? "text-danger"
-                          : "text-mute"
+                          ? "border-danger/30 bg-danger/5 text-danger"
+                          : "border-line bg-ink-850 text-mute"
                   }`}
                 >
                   {p.pnlPct == null ? "—" : `${p.pnlPct.toFixed(2)}%`}
@@ -524,41 +534,41 @@ export function BotView() {
       </section>
 
       {closedTrades.length > 0 ? (
-        <section className="rounded border border-line bg-ink-800">
-          <header className="border-b border-line px-3 py-2">
-            <h2 className="font-mono text-xs uppercase tracking-wide text-mute">
-              Closed trades · {closedTrades.length}
+        <section className="overflow-hidden rounded-xl border border-line bg-ink-900">
+          <header className="border-b border-line-soft bg-ink-850/80 px-3 py-2 backdrop-blur">
+            <h2 className="font-mono text-xs uppercase tracking-widest text-mute">
+              Closed trades · <span className="text-info">{closedTrades.length}</span>
             </h2>
             <p className="mt-0.5 text-[11px] text-mute">
-              Best {stats.bestTradeSol.toFixed(3)} SOL · Worst {stats.worstTradeSol.toFixed(3)} SOL
+              Best <span className="text-neon">{stats.bestTradeSol.toFixed(3)}</span> SOL · Worst <span className="text-danger">{stats.worstTradeSol.toFixed(3)}</span> SOL
             </p>
           </header>
-          <ul className="max-h-72 divide-y divide-line overflow-auto scroll-thin">
+          <ul className="max-h-72 divide-y divide-line-soft overflow-auto scroll-thin">
             {closedTrades.slice(0, 50).map((t, i) => (
-              <li key={`${t.mint}-${t.ts}-${i}`} className="flex items-baseline gap-3 px-3 py-2 text-xs">
+              <li key={`${t.mint}-${t.ts}-${i}`} className="flex items-baseline gap-3 px-3 py-2 text-xs transition-colors hover:bg-ink-850/40">
                 <span className="font-mono text-[11px] text-mute">
                   {new Date(t.ts).toLocaleTimeString()}
                 </span>
                 <span className="min-w-0 flex-1 truncate">
                   <Link href={`/coin/${t.mint}`} className="hover:text-neon">
-                    {t.symbol}
+                    ${t.symbol}
                   </Link>
                 </span>
                 <span className="font-mono text-[11px] text-mute">
                   in {t.solIn.toFixed(3)} · out {t.solOut.toFixed(3)} · {Math.round(t.holdingMinutes)}m
                 </span>
                 <span
-                  className={`font-mono text-[11px] ${
-                    t.pnlSol > 0 ? "text-neon" : t.pnlSol < 0 ? "text-danger" : "text-mute"
+                  className={`rounded-md border px-1.5 py-0.5 font-mono text-[11px] ${
+                    t.pnlSol > 0 ? "border-neon/30 bg-neon/5 text-neon" : t.pnlSol < 0 ? "border-danger/30 bg-danger/5 text-danger" : "border-line text-mute"
                   }`}
                 >
                   {t.pnlSol >= 0 ? "+" : ""}
                   {t.pnlSol.toFixed(4)} ({t.pnlPct.toFixed(1)}%)
                 </span>
                 {t.paper ? (
-                  <span className="rounded bg-warn/10 px-1 py-0.5 text-[10px] text-warn">paper</span>
+                  <span className="rounded-md border border-warn/30 bg-warn/5 px-1 py-0.5 text-[10px] text-warn">paper</span>
                 ) : (
-                  <span className="rounded bg-neon/10 px-1 py-0.5 text-[10px] text-neon">live</span>
+                  <span className="rounded-md border border-neon/30 bg-neon/5 px-1 py-0.5 text-[10px] text-neon">live</span>
                 )}
               </li>
             ))}
@@ -566,30 +576,30 @@ export function BotView() {
         </section>
       ) : null}
 
-      <section className="rounded border border-line bg-ink-800">
-        <header className="border-b border-line px-3 py-2">
-          <h2 className="font-mono text-xs uppercase tracking-wide text-mute">
-            Activity stream · {log.length}
+      <section className="overflow-hidden rounded-xl border border-line bg-ink-900">
+        <header className="border-b border-line-soft bg-ink-850/80 px-3 py-2 backdrop-blur">
+          <h2 className="font-mono text-xs uppercase tracking-widest text-mute">
+            Activity stream · <span className="text-info">{log.length}</span>
           </h2>
         </header>
         {log.length === 0 ? (
           <p className="p-6 text-center text-sm text-mute">No events yet.</p>
         ) : (
-          <ul className="max-h-[70vh] divide-y divide-line overflow-auto scroll-thin">
+          <ul className="max-h-[70vh] divide-y divide-line-soft overflow-auto scroll-thin">
             {log.map((e) => {
               const tone = botLogKindLabel(e.kind);
               const toneClass =
                 tone.tone === "ok"
-                  ? "border-neon/40 text-neon"
+                  ? "border-neon/40 bg-neon/5 text-neon"
                   : tone.tone === "warn"
-                    ? "border-warn/40 text-warn"
+                    ? "border-warn/40 bg-warn/5 text-warn"
                     : tone.tone === "danger"
-                      ? "border-danger/40 text-danger"
-                      : "border-line text-mute";
+                      ? "border-danger/40 bg-danger/5 text-danger"
+                      : "border-line bg-ink-850 text-mute";
               return (
-                <li key={e.id} className="flex items-baseline gap-3 px-3 py-2 text-sm">
+                <li key={e.id} className="flex items-baseline gap-3 px-3 py-2 text-sm transition-colors hover:bg-ink-850/40">
                   <span
-                    className={`shrink-0 rounded border px-2 py-0.5 font-mono text-[10px] uppercase ${toneClass}`}
+                    className={`shrink-0 rounded-md border px-2 py-0.5 font-mono text-[10px] uppercase ${toneClass}`}
                   >
                     {tone.label}
                   </span>
@@ -611,8 +621,12 @@ export function BotView() {
                   ) : null}
                   {e.pnlPct != null ? (
                     <span
-                      className={`font-mono text-[11px] ${
-                        e.pnlPct > 0 ? "text-neon" : e.pnlPct < 0 ? "text-danger" : "text-mute"
+                      className={`rounded-md border px-1.5 py-0.5 font-mono text-[11px] ${
+                        e.pnlPct > 0
+                          ? "border-neon/30 bg-neon/5 text-neon"
+                          : e.pnlPct < 0
+                            ? "border-danger/30 bg-danger/5 text-danger"
+                            : "border-line text-mute"
                       }`}
                     >
                       {e.pnlPct.toFixed(2)}%
@@ -625,7 +639,7 @@ export function BotView() {
                       target="_blank"
                       rel="noreferrer"
                     >
-                      tx
+                      tx ↗
                     </a>
                   ) : null}
                 </li>
@@ -666,67 +680,73 @@ function LearningPanel({ snap }: { snap: LearningSnapshot }) {
     .sort((a, b) => b[1].rate - a[1].rate)
     .slice(0, 6);
   return (
-    <section className="rounded border border-line bg-ink-800 p-3">
-      <header className="mb-2 flex items-center justify-between">
-        <h2 className="font-mono text-[11px] uppercase tracking-wide text-mute">
+    <section className="overflow-hidden rounded-xl border border-line glass">
+      <header className="mb-2 flex items-center justify-between border-b border-line-soft bg-ink-850/80 px-3 py-2 backdrop-blur">
+        <h2 className="font-mono text-[11px] uppercase tracking-widest text-mute">
           Adaptive learning · {snap.sampleSize} trade{snap.sampleSize === 1 ? "" : "s"} analyzed
         </h2>
         <span
-          className={`font-mono text-[11px] ${
-            snap.health > 0.7 ? "text-neon" : snap.health < 0.5 ? "text-danger" : "text-warn"
+          className={`rounded-md border px-1.5 py-0.5 font-mono text-[11px] ${
+            snap.health > 0.7
+              ? "border-neon/30 bg-neon/5 text-neon"
+              : snap.health < 0.5
+                ? "border-danger/30 bg-danger/5 text-danger"
+                : "border-warn/30 bg-warn/5 text-warn"
           }`}
           title="Consecutive-loss-adjusted health. 1.0 = full health."
         >
           health {snap.health.toFixed(2)}
         </span>
       </header>
-      {!hasData ? (
-        <p className="text-[11px] text-mute">
-          Need at least 3 closed trades before the bot can adapt. Until then it uses the
-          user&apos;s exact settings without biasing.
-        </p>
-      ) : (
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded border border-line bg-ink-900 p-2">
-            <p className="font-mono text-[10px] uppercase text-mute">win rate</p>
-            <p className="mt-1 font-mono text-sm">{(snap.winRate * 100).toFixed(0)}%</p>
-            <p className="mt-1 text-[11px] text-mute">
-              Bot is sizing at <span className="text-zinc-200">{(snap.sizeFraction * 100).toFixed(0)}%</span> of the
-              per-coin cap right now.
-            </p>
-          </div>
-          <div className="rounded border border-line bg-ink-900 p-2">
-            <p className="font-mono text-[10px] uppercase text-mute">signal weights</p>
-            <ul className="mt-1 font-mono text-[11px] text-mute">
-              <li>momentum ×{snap.signalWeights.momentum.toFixed(2)}</li>
-              <li>age ×{snap.signalWeights.age.toFixed(2)}</li>
-              <li>curve ×{snap.signalWeights.curve.toFixed(2)}</li>
-              <li>holders ×{snap.signalWeights.holders.toFixed(2)}</li>
-            </ul>
-          </div>
-          <div className="rounded border border-line bg-ink-900 p-2">
-            <p className="font-mono text-[10px] uppercase text-mute">narrative track record</p>
-            {top.length === 0 ? (
-              <p className="mt-1 text-[11px] text-mute">No repeats yet.</p>
-            ) : (
-              <ul className="mt-1 font-mono text-[11px] text-mute">
-                {top.map(([k, v]) => (
-                  <li key={k}>
-                    <span className="text-zinc-200">{k}</span> · {(v.rate * 100).toFixed(0)}% ({v.wins}W / {v.losses}L)
-                  </li>
-                ))}
+      <div className="p-3">
+        {!hasData ? (
+          <p className="text-[11px] text-mute">
+            Need at least 3 closed trades before the bot can adapt. Until then it uses the
+            user&apos;s exact settings without biasing.
+          </p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-md border border-line bg-ink-850 p-2.5">
+              <p className="font-mono text-[10px] uppercase tracking-widest text-mute">win rate</p>
+              <p className="mt-1 font-mono text-base text-white">{(snap.winRate * 100).toFixed(0)}%</p>
+              <p className="mt-1 text-[11px] text-mute">
+                Bot is sizing at <span className="text-zinc-200">{(snap.sizeFraction * 100).toFixed(0)}%</span> of the
+                per-coin cap right now.
+              </p>
+            </div>
+            <div className="rounded-md border border-line bg-ink-850 p-2.5">
+              <p className="font-mono text-[10px] uppercase tracking-widest text-mute">signal weights</p>
+              <ul className="mt-1 space-y-0.5 font-mono text-[11px] text-mute">
+                <li>momentum ×<span className="text-white">{snap.signalWeights.momentum.toFixed(2)}</span></li>
+                <li>age ×<span className="text-white">{snap.signalWeights.age.toFixed(2)}</span></li>
+                <li>curve ×<span className="text-white">{snap.signalWeights.curve.toFixed(2)}</span></li>
+                <li>holders ×<span className="text-white">{snap.signalWeights.holders.toFixed(2)}</span></li>
               </ul>
-            )}
+            </div>
+            <div className="rounded-md border border-line bg-ink-850 p-2.5">
+              <p className="font-mono text-[10px] uppercase tracking-widest text-mute">narrative track record</p>
+              {top.length === 0 ? (
+                <p className="mt-1 text-[11px] text-mute">No repeats yet.</p>
+              ) : (
+                <ul className="mt-1 space-y-0.5 font-mono text-[11px] text-mute">
+                  {top.map(([k, v]) => (
+                    <li key={k}>
+                      <span className="text-white">{k}</span> · <span className={v.rate >= 0.5 ? "text-neon" : "text-danger"}>{(v.rate * 100).toFixed(0)}%</span> ({v.wins}W / {v.losses}L)
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
-        </div>
-      )}
-      {snap.drawdownAddPct !== 0 ? (
-        <p className="mt-2 text-[11px] text-mute">
-          {snap.drawdownAddPct > 0
-            ? `Adaptive: tightening drawdown by ${(snap.drawdownAddPct * 100).toFixed(0)}% while cold.`
-            : `Adaptive: loosening drawdown by ${Math.abs(snap.drawdownAddPct * 100).toFixed(0)}% while hot.`}
-        </p>
-      ) : null}
+        )}
+        {snap.drawdownAddPct !== 0 ? (
+          <p className="mt-2 text-[11px] text-mute">
+            {snap.drawdownAddPct > 0
+              ? `Adaptive: tightening drawdown by ${(snap.drawdownAddPct * 100).toFixed(0)}% while cold.`
+              : `Adaptive: loosening drawdown by ${Math.abs(snap.drawdownAddPct * 100).toFixed(0)}% while hot.`}
+          </p>
+        ) : null}
+      </div>
     </section>
   );
 }
@@ -744,17 +764,25 @@ function StatCard({
 }) {
   const toneClass =
     tone === "neon"
-      ? "border-neon/30 bg-neon/5 text-neon"
+      ? "border-neon/30 bg-gradient-to-br from-neon/10 to-emerald-400/5 text-neon"
       : tone === "danger"
-        ? "border-danger/30 bg-danger/5 text-danger"
+        ? "border-danger/30 bg-gradient-to-br from-danger/10 to-rose-400/5 text-danger"
         : tone === "warn"
-          ? "border-warn/30 bg-warn/5 text-warn"
-          : "border-line bg-ink-800 text-zinc-100";
+          ? "border-warn/30 bg-gradient-to-br from-warn/10 to-amber-400/5 text-warn"
+          : "border-line bg-ink-900 text-zinc-100";
   return (
-    <div className={`rounded border p-3 ${toneClass}`}>
-      <p className="font-mono text-[10px] uppercase text-mute">{label}</p>
-      <p className="mt-1 font-mono text-base">{value}</p>
-      {sub ? <p className="text-[11px] text-mute">{sub}</p> : null}
+    <div className={`relative overflow-hidden rounded-xl border p-3 ${toneClass}`}>
+      <div
+        aria-hidden
+        className={`pointer-events-none absolute -top-8 -right-8 h-20 w-20 rounded-full blur-2xl ${
+          tone === "neon" ? "bg-neon/15" : tone === "danger" ? "bg-danger/15" : tone === "warn" ? "bg-warn/15" : "bg-info/10"
+        }`}
+      />
+      <div className="relative">
+        <p className="font-mono text-[10px] uppercase tracking-widest text-mute">{label}</p>
+        <p className="mt-1 truncate font-mono text-base text-white sm:text-lg">{value}</p>
+        {sub ? <p className="truncate text-[11px] text-mute">{sub}</p> : null}
+      </div>
     </div>
   );
 }
@@ -819,18 +847,23 @@ function EquityCurve({ points }: { points: EquityPoint[] }) {
   const deltaPct = start > 0 ? (delta / start) * 100 : 0;
   const tone = delta >= 0 ? "text-neon" : "text-danger";
   return (
-    <section className="rounded border border-line bg-ink-800 p-3">
-      <header className="mb-2 flex items-center justify-between">
-        <h2 className="font-mono text-[11px] uppercase tracking-wide text-mute">Equity curve</h2>
-        <span className={`font-mono text-xs ${tone}`}>
+    <section className="overflow-hidden rounded-xl border border-line glass">
+      <header className="flex items-center justify-between border-b border-line-soft bg-ink-850/80 px-3 py-2 backdrop-blur">
+        <h2 className="font-mono text-[11px] uppercase tracking-widest text-mute">Equity curve</h2>
+        <span className={`rounded-md border px-1.5 py-0.5 font-mono text-xs ${
+          delta >= 0
+            ? "border-neon/30 bg-neon/5 text-neon"
+            : "border-danger/30 bg-danger/5 text-danger"
+        }`}>
           {delta >= 0 ? "+" : ""}
           {delta.toFixed(4)} SOL ({deltaPct.toFixed(2)}%) · {points.length} pts
         </span>
       </header>
+      <div className="p-3">
       <svg viewBox={`0 0 ${w} ${h}`} className="block h-32 w-full">
         <defs>
           <linearGradient id="eq-grad" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="currentColor" stopOpacity="0.35" />
+            <stop offset="0%" stopColor="currentColor" stopOpacity="0.4" />
             <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
           </linearGradient>
         </defs>
@@ -860,6 +893,7 @@ function EquityCurve({ points }: { points: EquityPoint[] }) {
           {end.toFixed(4)} SOL
         </text>
       </svg>
+      </div>
     </section>
   );
 }
