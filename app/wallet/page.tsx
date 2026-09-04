@@ -14,7 +14,7 @@ import { fetchJupiterUsdPrice, getKnownTokenMeta } from "@/lib/jupiter";
 import { quoteTokenToSol } from "@/lib/token-value";
 import { compactNumber, shortenAddress, tokensToUi } from "@/lib/format";
 import { ConnectWalletButton } from "@/components/ConnectWalletButton";
-import { detectWallets } from "@/lib/wallet-detect";
+import { detectFromAdapters, type DetectedWallet } from "@/lib/wallet-detect";
 import { isMobileDevice } from "@/lib/mobile";
 import { notify } from "@/components/NotificationProvider";
 
@@ -239,14 +239,15 @@ export default function WalletPage() {
 }
 
 function ConnectScreen() {
+  const { wallets: adapterWallets } = useWallet();
   const [mounted, setMounted] = useState(false);
-  const [wallets, setWallets] = useState<ReturnType<typeof detectWallets>>([]);
+  const [wallets, setWallets] = useState<DetectedWallet[]>([]);
   const isMobile = useMemo(() => (mounted ? isMobileDevice() : false), [mounted]);
 
   useEffect(() => {
     setMounted(true);
-    setWallets(detectWallets());
-  }, []);
+    setWallets(detectFromAdapters(adapterWallets));
+  }, [adapterWallets]);
 
   const installed = wallets.filter((w) => w.installed);
   const installable = wallets.filter((w) => !w.installed);

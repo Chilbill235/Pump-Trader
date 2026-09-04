@@ -1,26 +1,44 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { shortenAddress } from "@/lib/format";
-import { detectWallets, type DetectedWallet, type WalletId } from "@/lib/wallet-detect";
+import { detectFromAdapters, type DetectedWallet, type WalletId } from "@/lib/wallet-detect";
 
-type Status = "idle" | "opening" | "opening-app" | "connecting";
+type Status = "idle" | "connecting" | "opening-app" | "error";
 
 export function ConnectWalletButton({ className }: { className?: string }) {
-  const { publicKey, connected, connecting, disconnect, wallet } = useWallet();
+  const { publicKey, connected, connecting, disconnect, wallet, wallets, select } = useWallet();
   const [open, setOpen] = useState(false);
-  const [wallets, setWallets] = useState<DetectedWallet[]>([]);
   const [status, setStatus] = useState<Status>("idle");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [detected, setDetected] = useState<DetectedWallet[]>([]);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
 
+  const rescan = useCallback(() => {
+    setDetected(detectFromAdapters(wallets));
+  }, [wallets]);
+
   useEffect(() => {
-    setWallets(detectWallets());
-    const onFocus = () => setWallets(detectWallets());
+    rescan();
+    const onFocus = () => rescan();
+    const onVisibility = () => rescan();
     window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, []);
+    document.addEventListener("visibilitychange", onVisibility);
+    // Re-scan every 5s for 30s after mount in case the provider injects late.
+    let n = 0;
+    const id = setInterval(() => {
+      n += 1;
+      rescan();
+      if (n > 6) clearInterval(id);
+    }, 5000);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+      clearInterval(id);
+    };
+  }, [rescan]);
 
   useEffect(() => {
     if (!open) return;
@@ -44,66 +62,82 @@ export function ConnectWalletButton({ className }: { className?: string }) {
     };
   }, [open]);
 
+  // Surface wallet errors as a small toast inside the picker.
+  useEffect(() => {
+    const handler = (err: Error) => {
+      const msg = err?.message ?? "Wallet error.";
+      // User rejections are not real errors.
+      if (/user (rejected|canceled|denied)/i.test(msg)) {
+        setStatus("idle");
+        return;
+      }
+      setStatus("error");
+      setErrorMsg(msg);
+    };
+    const w = wallet as unknown as { on?: (e: string, l: never) => void; off?: (e: string, l: never) => void } | null;
+    if (w?.on) w.on("error", handler as never);
+    return () => {
+      if (w?.off) w.off("error", handler as never);
+    };
+  }, [wallet]);
+
+  // Auto-close the picker once we connect.
   useEffect(() => {
     if (connected) {
       setStatus("idle");
+      setErrorMsg(null);
       setOpen(false);
     }
   }, [connected]);
 
   const label = useMemo(() => {
     if (connected && publicKey) return shortenAddress(publicKey.toBase58(), 4, 4);
-    if (connecting) return "Connecting…";
+    if (connecting || status === "connecting") return "Connecting…";
     if (status === "opening-app") return "Opening…";
-    if (status === "opening") return "Opening…";
+    if (status === "error") return "Failed";
     return "Connect";
   }, [connected, publicKey, connecting, status]);
 
-  const busy = connecting || status !== "idle";
+  const busy = connecting || status === "connecting" || status === "opening-app";
 
   function handleMainClick() {
     if (connected) {
       setOpen((v) => !v);
       return;
     }
+    setStatus("idle");
+    setErrorMsg(null);
     setOpen(true);
   }
 
   async function pickInstalled(w: DetectedWallet) {
-    if (!w.installed) return;
-    setStatus("opening");
+    setStatus("connecting");
+    setErrorMsg(null);
     try {
-      if (w.id === "phantom") {
-        const phantom = (window as Window & { solana?: { connect?: () => Promise<unknown> } }).solana;
-        if (phantom?.connect) await phantom.connect();
-        setOpen(false);
+      // Selecting tells the WalletProvider which adapter to route through.
+      // We do this BEFORE connect() so the connect() call hits the right
+      // adapter. The adapter's own connect() takes care of the rest.
+      select(w.adapterName as never);
+      // After select(), the adapter lives in `wallets` under the same name
+      // and is what `useWallet().wallet` will resolve to on the next render.
+      // The select() call is synchronous, so we can immediately grab the
+      // adapter reference from the wallets array and call connect on it
+      // directly. This avoids a render race.
+      const target = wallets.find((x) => x.adapter?.name === w.adapterName)?.adapter;
+      if (!target) {
+        throw new Error(
+          `${w.name} adapter not available. Reload the page or install the extension.`,
+        );
+      }
+      await target.connect();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/user (rejected|canceled|denied)/i.test(msg)) {
+        setStatus("idle");
         return;
       }
-      if (w.id === "solflare") {
-        const solflare = (window as Window & { solflare?: { connect?: () => Promise<unknown> } }).solflare;
-        if (solflare?.connect) await solflare.connect();
-        setOpen(false);
-        return;
-      }
-      if (w.id === "trust") {
-        const trust = (window as Window & { trustwallet?: { connect?: () => Promise<unknown> } }).trustwallet;
-        if (trust?.connect) {
-          await trust.connect();
-          setOpen(false);
-          return;
-        }
-      }
-      if (w.id === "coinbase") {
-        const cb = (window as Window & { coinbaseSolana?: { connect?: () => Promise<unknown> } }).coinbaseSolana;
-        if (cb?.connect) {
-          await cb.connect();
-          setOpen(false);
-          return;
-        }
-      }
-      setStatus("idle");
-    } catch {
-      setStatus("idle");
+      setStatus("error");
+      setErrorMsg(msg);
     }
   }
 
@@ -140,6 +174,7 @@ export function ConnectWalletButton({ className }: { className?: string }) {
       // ignore
     }
     setOpen(false);
+    setStatus("idle");
   }
 
   return (
@@ -154,18 +189,19 @@ export function ConnectWalletButton({ className }: { className?: string }) {
         className={`press relative flex h-9 items-center gap-2 overflow-hidden rounded-md border px-3 font-mono text-xs font-semibold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-neon ${
           connected
             ? "border-neon/60 bg-gradient-to-r from-neon/15 to-neon/5 text-neon hover:from-neon/25 hover:to-neon/10"
-            : "border-line bg-ink-800 text-mute hover:border-neon hover:text-neon"
+            : status === "error"
+              ? "border-danger/60 bg-danger/5 text-danger hover:border-danger"
+              : "border-line bg-ink-800 text-mute hover:border-neon hover:text-neon"
         }`}
       >
-        <span
-          aria-hidden
-          className={`relative flex h-2 w-2 ${connected ? "" : ""}`}
-        >
+        <span aria-hidden className="relative flex h-2 w-2">
           {connected ? (
             <>
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-neon opacity-60" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-neon" />
             </>
+          ) : status === "error" ? (
+            <span className="h-2 w-2 rounded-full bg-danger" />
           ) : (
             <span className="h-2 w-2 rounded-full bg-mute/60" />
           )}
@@ -176,11 +212,11 @@ export function ConnectWalletButton({ className }: { className?: string }) {
             <path d="M2 4l3 3 3-3" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         ) : (
-          <svg aria-hidden width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path d="M3 1.5v11l9-5.5z" fill="currentColor" stroke="none" transform="scale(.7) translate(2 0)" />
+          <svg aria-hidden width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
+            <path d="M3 1.5v11l9-5.5z" />
           </svg>
         )}
-        {busy && !connected ? (
+        {busy ? (
           <span aria-hidden className="ml-1 inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
         ) : null}
       </button>
@@ -200,11 +236,17 @@ export function ConnectWalletButton({ className }: { className?: string }) {
             />
           ) : (
             <Picker
-              wallets={wallets}
+              wallets={detected}
               status={status}
+              errorMsg={errorMsg}
               onPickInstalled={pickInstalled}
               onDeeplink={openDeeplink}
               onInstall={openInstall}
+              onRetry={rescan}
+              onDismissError={() => {
+                setStatus("idle");
+                setErrorMsg(null);
+              }}
             />
           )}
         </div>
@@ -216,9 +258,12 @@ export function ConnectWalletButton({ className }: { className?: string }) {
 function Picker(props: {
   wallets: DetectedWallet[];
   status: Status;
+  errorMsg: string | null;
   onPickInstalled: (w: DetectedWallet) => void;
   onDeeplink: (w: DetectedWallet) => void;
   onInstall: (w: DetectedWallet) => void;
+  onRetry: () => void;
+  onDismissError: () => void;
 }) {
   const installed = props.wallets.filter((w) => w.installed);
   const deeplink = props.wallets.filter((w) => !w.installed && w.deeplink);
@@ -231,6 +276,28 @@ function Picker(props: {
           Auto-detected. Your keys never leave your wallet.
         </p>
       </div>
+      {props.status === "error" && props.errorMsg ? (
+        <div className="space-y-1 rounded border border-danger/40 bg-danger/5 p-2 text-xs text-danger">
+          <p className="font-mono font-semibold">Could not connect.</p>
+          <p className="font-mono text-[11px] text-mute">{props.errorMsg}</p>
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              type="button"
+              onClick={props.onRetry}
+              className="press rounded border border-line bg-ink-800 px-2 py-1 font-mono text-[11px] text-mute hover:border-neon hover:text-neon"
+            >
+              Re-scan
+            </button>
+            <button
+              type="button"
+              onClick={props.onDismissError}
+              className="press rounded border border-line bg-ink-800 px-2 py-1 font-mono text-[11px] text-mute hover:border-danger hover:text-danger"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      ) : null}
       {installed.length > 0 ? (
         <div>
           <p className="mb-1 font-mono text-[10px] uppercase text-mute">Ready</p>
@@ -302,7 +369,9 @@ function WalletRow(props: {
   onInstall: (w: DetectedWallet) => void;
 }) {
   const { w } = props;
-  const busy = props.status !== "idle";
+  const busy =
+    props.status === "connecting" ||
+    props.status === "opening-app";
 
   if (w.installed) {
     return (
@@ -322,9 +391,13 @@ function WalletRow(props: {
           </span>
         </span>
         <span aria-hidden className="shrink-0 text-mute group-hover:text-neon">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path d="M5 3l4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          {busy ? (
+            <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          ) : (
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M5 3l4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
         </span>
       </button>
     );
@@ -390,9 +463,7 @@ function ConnectedMenu(props: {
     <div className="space-y-2">
       <div className="rounded-md border border-neon/30 bg-neon/5 p-2.5">
         <p className="font-mono text-[10px] uppercase tracking-widest text-neon">Connected</p>
-        <p className="mt-1 break-all font-mono text-sm">
-          {props.address}
-        </p>
+        <p className="mt-1 break-all font-mono text-sm">{props.address}</p>
         <p className="mt-1 font-mono text-[11px] text-mute">via {props.walletName}</p>
       </div>
       <button
@@ -444,10 +515,10 @@ function WalletBadge({ id }: { id: WalletId }) {
     id === "phantom"
       ? "#ab9ff2"
       : id === "solflare"
-      ? "#ffa133"
-      : id === "trust"
-      ? "#3375bb"
-      : "#0052ff";
+        ? "#ffa133"
+        : id === "trust"
+          ? "#3375bb"
+          : "#0052ff";
   return (
     <span
       aria-hidden

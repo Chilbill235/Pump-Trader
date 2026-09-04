@@ -1,5 +1,5 @@
-export type WalletId = "phantom" | "solflare" | "trust" | "coinbase";
 
+export type WalletId = "phantom" | "solflare" | "trust" | "coinbase";
 export type DetectedWallet = {
   id: WalletId;
   name: string;
@@ -7,27 +7,15 @@ export type DetectedWallet = {
   inApp: boolean;
   deeplink: string | null;
   installUrl: string;
+  adapterName: string;
   source?: "window" | "ua";
 };
 
-declare global {
-  interface Window {
-    solana?: { isPhantom?: boolean };
-    solflare?: { isSolflare?: boolean };
-    trustwallet?: unknown;
-    coinbaseSolana?: unknown;
-  }
-}
-
 const INSTALL_URLS: Record<WalletId, string> = {
-  phantom:
-    "https://phantom.app/download",
-  solflare:
-    "https://solflare.com/download",
-  trust:
-    "https://trustwallet.com/",
-  coinbase:
-    "https://www.coinbase.com/wallet/downloads",
+  phantom: "https://phantom.app/download",
+  solflare: "https://solflare.com/download",
+  trust: "https://trustwallet.com/",
+  coinbase: "https://www.coinbase.com/wallet/downloads",
 };
 
 const APP_SCHEMES: Record<WalletId, string> = {
@@ -35,6 +23,20 @@ const APP_SCHEMES: Record<WalletId, string> = {
   solflare: "solflare://",
   trust: "trust://",
   coinbase: "cbwallet://",
+};
+
+const NAME_BY_ID: Record<WalletId, string> = {
+  phantom: "Phantom",
+  solflare: "Solflare",
+  trust: "Trust Wallet",
+  coinbase: "Coinbase Wallet",
+};
+
+const ADAPTER_NAME_BY_ID: Record<WalletId, string> = {
+  phantom: "Phantom",
+  solflare: "Solflare",
+  trust: "Trust Wallet",
+  coinbase: "Coinbase Wallet",
 };
 
 function ua(): string {
@@ -52,7 +54,7 @@ function uaMentions(id: WalletId): boolean {
     case "trust":
       return /Trust\s?Wallet/i.test(s);
     case "coinbase":
-      return /Coinbase\s?Wallet/i.test(s);
+      return /Coinbase/i.test(s);
   }
 }
 
@@ -60,13 +62,21 @@ function windowInstalled(id: WalletId): boolean {
   if (typeof window === "undefined") return false;
   switch (id) {
     case "phantom":
-      return !!window.solana?.isPhantom;
+      return Boolean(
+        (window as { solana?: { isPhantom?: boolean } }).solana?.isPhantom ||
+          (window as { phantom?: { solana?: unknown } }).phantom?.solana,
+      );
     case "solflare":
-      return !!window.solflare?.isSolflare;
+      return Boolean((window as { solflare?: { isSolflare?: boolean } }).solflare?.isSolflare);
     case "trust":
-      return !!window.trustwallet;
+      return Boolean(
+        (window as { trustwallet?: { solana?: unknown } | unknown }).trustwallet,
+      );
     case "coinbase":
-      return !!window.coinbaseSolana;
+      return Boolean(
+        (window as { coinbaseSolana?: unknown }).coinbaseSolana ||
+          (window as { coinbaseWalletExtension?: unknown }).coinbaseWalletExtension,
+      );
   }
 }
 
@@ -84,29 +94,29 @@ function buildDeeplink(id: WalletId, targetUrl: string): string {
   }
 }
 
-export function detectWallets(): DetectedWallet[] {
+type AdapterInfo = { adapter: { name: string }; readyState: string | number };
+
+export function detectFromAdapters(adapters: AdapterInfo[]): DetectedWallet[] {
   const isMobile = /Android|iPhone|iPad|iPod|Mobile Safari/i.test(ua());
   const targetUrl =
     typeof window !== "undefined" ? window.location.href : "https://pump-trader.app";
-  const all: WalletId[] = ["phantom", "solflare", "trust", "coinbase"];
-  return all.map((id) => {
+  const order: WalletId[] = ["phantom", "solflare", "trust", "coinbase"];
+  // WalletReadyState.Installed === "Installed"
+  const INSTALLED = "Installed";
+  return order.map((id) => {
     const inApp = uaMentions(id);
     const installed = inApp || windowInstalled(id);
+    const adapter = adapters.find((a) => a.adapter?.name === ADAPTER_NAME_BY_ID[id]);
+    const ready = adapter?.readyState === INSTALLED;
     return {
       id,
-      name:
-        id === "phantom"
-          ? "Phantom"
-          : id === "solflare"
-          ? "Solflare"
-          : id === "trust"
-          ? "Trust Wallet"
-          : "Coinbase Wallet",
-      installed,
+      name: NAME_BY_ID[id],
+      installed: installed || ready,
       inApp,
       deeplink: isMobile && !installed ? buildDeeplink(id, targetUrl) : null,
       installUrl: INSTALL_URLS[id],
-      source: inApp ? "ua" : windowInstalled(id) ? "window" : undefined,
+      adapterName: ADAPTER_NAME_BY_ID[id],
+      source: inApp ? "ua" : installed ? "window" : undefined,
     };
   });
 }
