@@ -66,8 +66,16 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
 export function useSettings(): Ctx {
   const ctx = useContext(SettingsContext);
-  if (!ctx) throw new Error("useSettings must be used inside SettingsProvider");
-  return ctx;
+  if (ctx) return ctx;
+  // Defensive fallback: in the rare case a child is rendered outside
+  // SettingsProvider (e.g. on the login screen, or before hydration), return
+  // defaults rather than throwing — a thrown error here would tear down the
+  // whole app. `update` is a no-op without an active account.
+  return {
+    settings: DEFAULT_SETTINGS,
+    hydrated: false,
+    update: () => undefined,
+  };
 }
 
 // On unload, also persist the current settings synchronously in case the

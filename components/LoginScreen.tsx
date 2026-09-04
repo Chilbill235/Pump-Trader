@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAccounts } from "./AccountsProvider";
-import { useSettings } from "./SettingsProvider";
 import { isAccountsCapable } from "@/lib/accounts";
 
 type Mode = "create" | "unlock";
@@ -21,9 +20,6 @@ function pinStrength(pin: string): { score: 0 | 1 | 2 | 3 | 4; label: string; co
 
 export function LoginScreen() {
   const { capable, accounts, create, unlock, ready, remove } = useAccounts();
-  const { settings, update } = useSettings();
-  void settings;
-  void update;
   const [mode, setMode] = useState<Mode>("create");
   const [username, setUsername] = useState("");
   const [pin, setPin] = useState("");
