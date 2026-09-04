@@ -8,7 +8,7 @@ export function QuickMintFAB({ visible }: { visible: boolean }) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
@@ -54,7 +54,7 @@ export function QuickMintFAB({ visible }: { visible: boolean }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="press fixed bottom-[calc(env(safe-area-inset-bottom)+88px)] right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full border border-neon/50 bg-gradient-to-br from-neon to-emerald-400 text-ink-950 shadow-[0_8px_30px_rgba(57,255,136,0.5)] transition-transform hover:scale-105 active:scale-95 sm:hidden"
+        className="press fixed bottom-[calc(env(safe-area-inset-bottom)+68px)] right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full border border-neon/50 bg-gradient-to-br from-neon to-emerald-400 text-ink-950 shadow-[0_8px_30px_rgba(57,255,136,0.5)] transition-transform hover:scale-105 active:scale-95 sm:hidden"
         aria-label="Quick trade · paste mint"
       >
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden>
@@ -94,7 +94,7 @@ export function QuickMintFAB({ visible }: { visible: boolean }) {
             </div>
             <form onSubmit={submit} className="space-y-2">
               <textarea
-                ref={inputRef as never}
+                ref={inputRef}
                 value={value}
                 onChange={(e) => {
                   setValue(e.target.value);
@@ -102,6 +102,7 @@ export function QuickMintFAB({ visible }: { visible: boolean }) {
                 }}
                 rows={2}
                 placeholder="Paste mint or https://pump.fun/coin/…"
+                aria-label="Paste mint or pump.fun URL"
                 className="block w-full resize-none rounded-lg border border-line bg-ink-850 px-3 py-2.5 font-mono text-sm outline-none focus:border-neon"
               />
               {error ? (

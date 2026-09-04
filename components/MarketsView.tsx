@@ -9,7 +9,6 @@ import { CoinImage } from "./CoinImage";
 import { CopyButton } from "./CopyButton";
 import { QuickTradePanel } from "./QuickTradePanel";
 import { MobileTradeSheet } from "./MobileTradeSheet";
-import { isMobileDevice } from "@/lib/mobile";
 import { useWalletData } from "./WalletDataProvider";
 
 type Kind = "trending" | "newest";
@@ -27,10 +26,12 @@ export function MarketsView() {
   const router = useRouter();
 
   useEffect(() => {
-    const update = () => setIsMobile(isMobileDevice());
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 1023px)");
+    const update = () => setIsMobile(mq.matches);
     update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
   }, []);
 
   const load = useCallback(async (nextKind: Kind, nextQ: string) => {
@@ -144,12 +145,14 @@ export function MarketsView() {
             </button>
           ))}
           {coins.length > 0 ? (
-            <span className="ml-auto flex items-center gap-2 font-mono text-[11px] text-mute">
+            <span className="ml-auto flex items-center gap-1.5 font-mono text-[11px] text-mute sm:gap-2">
               <span className="rounded border border-line bg-ink-900/60 px-2 py-0.5">
                 {coins.length} coins
               </span>
               {source ? (
-                <span className="hidden truncate sm:inline">via {source}</span>
+                <span className="truncate rounded border border-line bg-ink-900/60 px-2 py-0.5">
+                  {source.startsWith("https://") ? source.replace(/^https?:\/\//, "").split("/")[0] : source}
+                </span>
               ) : null}
             </span>
           ) : null}

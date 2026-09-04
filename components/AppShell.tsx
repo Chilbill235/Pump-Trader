@@ -355,6 +355,7 @@ function Header(props: {
                 title="Account"
                 aria-label="Account"
                 aria-haspopup="dialog"
+                aria-expanded={props.mobileProfileOpen}
                 style={{ borderColor: `${mobileAccent}66` }}
               >
                 <span

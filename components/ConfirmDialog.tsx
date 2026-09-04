@@ -66,7 +66,7 @@ export function ConfirmDialog({
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-stretch justify-center overflow-hidden bg-black/80 sm:items-center sm:p-4"
+      className="fixed inset-0 z-[100] flex items-stretch justify-center overflow-hidden bg-ink-950/85 backdrop-blur-sm sm:items-center sm:p-4"
       role="presentation"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onCancel();
@@ -76,24 +76,26 @@ export function ConfirmDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="pointer-events-auto flex w-full max-w-md flex-col rounded-t-xl border border-line bg-ink-800 shadow-2xl sm:rounded-xl"
+        className="pointer-events-auto flex w-full max-w-md flex-col overflow-hidden rounded-t-xl border border-line glass-strong shadow-2xl sm:rounded-xl"
         style={{
-          maxHeight: "calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom))",
+          maxHeight: "calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom))",
           height: "auto",
         }}
       >
-        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line/60 px-4 pb-2 pt-4">
-          <h2 id={titleId} className="font-mono text-base font-semibold tracking-wide text-white sm:text-sm">
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line-soft bg-ink-850/80 px-4 py-3 backdrop-blur">
+          <h2 id={titleId} className="font-mono text-base font-semibold tracking-wide text-white">
             {title}
           </h2>
           <button
             type="button"
-            className="shrink-0 rounded border border-line px-2 py-1 font-mono text-xs text-mute hover:border-danger hover:text-danger"
+            className="press shrink-0 rounded-md border border-line bg-ink-800 p-1.5 text-mute hover:border-danger hover:text-danger"
             onClick={onCancel}
             aria-label="Close"
             disabled={busy}
           >
-            ✕
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+              <path d="M2 2L12 12M12 2L2 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
           </button>
         </div>
         <div
@@ -103,13 +105,13 @@ export function ConfirmDialog({
           {body}
         </div>
         <div
-          className="flex shrink-0 flex-col gap-2 border-t border-line/60 bg-ink-900/60 px-4 py-3 sm:flex-row sm:justify-end sm:gap-2"
+          className="flex shrink-0 flex-col gap-2 border-t border-line-soft bg-ink-850/80 px-4 py-3 sm:flex-row sm:justify-end sm:gap-2"
           style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
         >
           <button
             ref={cancelRef}
             type="button"
-            className="order-2 w-full rounded border border-line px-4 py-2.5 text-base text-mute focus:outline-none focus-visible:ring-2 focus-visible:ring-neon sm:order-1 sm:w-auto sm:px-3 sm:py-1.5 sm:text-sm"
+            className="press order-2 min-h-[44px] w-full rounded-md border border-line bg-ink-800 px-4 py-2.5 text-sm text-mute focus:outline-none focus-visible:ring-2 focus-visible:ring-neon sm:order-1 sm:min-h-0 sm:w-auto sm:px-3 sm:py-1.5"
             onClick={onCancel}
             disabled={busy}
           >
@@ -117,8 +119,10 @@ export function ConfirmDialog({
           </button>
           <button
             type="button"
-            className={`order-1 w-full rounded px-4 py-3 text-base font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-neon sm:order-2 sm:w-auto sm:px-3 sm:py-1.5 sm:text-sm ${
-              danger ? "bg-danger text-white" : "bg-neon text-ink-950"
+            className={`press order-1 min-h-[44px] w-full rounded-md px-4 py-2.5 text-sm font-semibold focus:outline-none focus-visible:ring-2 sm:order-2 sm:min-h-0 sm:w-auto sm:px-3 sm:py-1.5 ${
+              danger
+                ? "border border-danger/50 bg-gradient-to-r from-danger to-rose-400 text-white focus-visible:ring-danger"
+                : "border border-neon/50 bg-gradient-to-r from-neon to-emerald-400 text-ink-950 focus-visible:ring-neon"
             }`}
             onClick={onConfirm}
             disabled={busy}

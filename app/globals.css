@@ -292,11 +292,24 @@ input[type="number"] {
   body { padding-top: env(safe-area-inset-top); }
 }
 
-/* Hide the broken iOS-only rubber-band from shifting modals. */
+/* Lock the body when any modal/sheet/drawer is open. Use !important to win
+   over inline overflow styles that components may have left behind. */
+body.modal-open {
+  overflow: hidden !important;
+  overscroll-behavior: contain;
+  /* On iOS Safari, fixed+width:100% preserves scroll position; without
+     `inset` it also loses the safe-area padding. Compensate with a padding
+     equal to the inset that was on body. */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
 @supports (-webkit-touch-callout: none) {
   body.modal-open {
     position: fixed;
     width: 100%;
+    left: 0;
+    right: 0;
   }
 }
 

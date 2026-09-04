@@ -152,9 +152,9 @@ export function LoginScreen() {
           <div className="flex rounded-lg border border-line bg-ink-850 p-1 font-mono text-xs">
             <button
               type="button"
-              className={`press flex-1 rounded-md px-3 py-2 ${
+              className={`press flex-1 rounded-md px-3 py-2 transition-colors ${
                 mode === "unlock"
-                  ? "border border-neon/40 bg-neon/10 text-neon shadow-[inset_0_0_0_1px_rgba(57,255,136,0.3)]"
+                  ? "bg-neon/10 text-neon shadow-[inset_0_0_0_1px_rgba(57,255,136,0.4)]"
                   : "text-mute hover:text-white"
               }`}
               onClick={() => {
@@ -166,9 +166,9 @@ export function LoginScreen() {
             </button>
             <button
               type="button"
-              className={`press flex-1 rounded-md px-3 py-2 ${
+              className={`press flex-1 rounded-md px-3 py-2 transition-colors ${
                 mode === "create"
-                  ? "border border-info/40 bg-info/10 text-info shadow-[inset_0_0_0_1px_rgba(72,167,255,0.3)]"
+                  ? "bg-info/10 text-info shadow-[inset_0_0_0_1px_rgba(72,167,255,0.4)]"
                   : "text-mute hover:text-white"
               }`}
               onClick={() => {
@@ -234,6 +234,10 @@ export function LoginScreen() {
                 className="mt-1 w-full rounded-lg border border-line bg-ink-850 px-3 py-2.5 font-mono text-sm focus:border-neon focus:outline-none"
                 maxLength={24}
                 autoComplete="username"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+                inputMode="text"
               />
             </label>
           ) : null}
@@ -254,7 +258,10 @@ export function LoginScreen() {
             <input
               ref={pinRef}
               type={showPin ? "text" : "password"}
-              autoComplete="off"
+              autoComplete={mode === "create" ? "new-password" : "current-password"}
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
               value={pin}
               onChange={(e) => {
                 setPin(e.target.value);
@@ -292,7 +299,10 @@ export function LoginScreen() {
               <span className="block font-mono text-[10px] uppercase tracking-widest text-mute">Confirm PIN</span>
               <input
                 type={showPin ? "text" : "password"}
-                autoComplete="off"
+                autoComplete="new-password"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
                 value={confirmPin}
                 onChange={(e) => {
                   setConfirmPin(e.target.value);

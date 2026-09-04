@@ -535,7 +535,7 @@ function HoldingRow({
             ? `Below $${MIN_HOLDING_USD_TO_TRADE.toFixed(2)} minimum — top up or sell to recoup fees first.`
             : undefined
         }
-        className="press shrink-0 rounded-md border border-line bg-ink-850 px-3 py-1.5 font-mono text-[11px] text-mute opacity-0 transition-colors group-hover:border-neon group-hover:text-neon group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line disabled:hover:text-mute sm:opacity-100"
+        className="press inline-flex min-h-[36px] shrink-0 items-center justify-center rounded-md border border-line bg-ink-850 px-3 py-1.5 font-mono text-[11px] text-mute transition-colors hover:border-neon hover:text-neon disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line disabled:hover:text-mute"
       >
         Trade
       </button>

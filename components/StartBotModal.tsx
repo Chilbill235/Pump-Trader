@@ -385,11 +385,24 @@ export function StartBotModal({ open, onClose }: Props) {
                 onChange={(e) => setSimulate(e.target.checked)}
                 className="mt-1 h-4 w-4 accent-neon"
               />
-              <span>
-                <span className="block text-sm text-white">Simulate / paper mode</span>
-                <span className="block text-xs text-mute">
-                  OFF → bot trades REAL SOL on mainnet using your connected wallet.
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-2 text-sm text-white">
+                  {simulate ? "Simulate / paper mode" : "Live mainnet mode"}
                 </span>
+                <span className="mt-0.5 block text-xs text-mute">
+                  {simulate
+                    ? "ON. No transactions broadcast. Use this for tuning the bot."
+                    : "OFF. The bot will spend real SOL using your connected wallet."}
+                </span>
+              </span>
+              <span
+                className={`shrink-0 rounded-md border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest ${
+                  simulate
+                    ? "border-neon/30 bg-neon/5 text-neon"
+                    : "border-danger/30 bg-danger/5 text-danger"
+                }`}
+              >
+                {simulate ? "paper" : "live"}
               </span>
             </label>
             {live ? (
@@ -496,6 +509,7 @@ function Field({
         value={value}
         step={step}
         min={min}
+        inputMode="decimal"
         onChange={(e) => {
           const raw = e.target.value;
           if (raw === "" || raw === "-") {

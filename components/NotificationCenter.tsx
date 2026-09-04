@@ -336,7 +336,10 @@ export function ToastBanner() {
   }, [toast, markRead]);
   if (!toast) return null;
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-[72px] z-40 flex justify-center px-3 safe-top sm:top-[64px]">
+    <div
+      className="pointer-events-none fixed inset-x-0 z-40 flex justify-center px-3 safe-top"
+      style={{ top: "calc(env(safe-area-inset-top) + 4.25rem)" }}
+    >
       <div
         className={`pop-in pointer-events-auto w-full max-w-md overflow-hidden rounded-xl border p-3 shadow-2xl backdrop-blur ${LEVEL_STYLES[toast.level] ?? LEVEL_STYLES.info}`}
         role="status"

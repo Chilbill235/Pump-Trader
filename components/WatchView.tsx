@@ -750,12 +750,12 @@ function CandidateCard(props: {
         <p className="mt-1 text-[11px] text-mute">{c.narrativeNote}</p>
       </div>
 
-      <div className="mt-3 flex gap-2">
+      <div className="mt-3 flex flex-wrap gap-2">
         <button
           type="button"
           disabled={props.busy}
           onClick={props.onApprove}
-          className="press rounded bg-neon px-3 py-1.5 font-mono text-xs text-ink-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon disabled:opacity-40"
+          className="press inline-flex min-h-[44px] flex-1 items-center justify-center rounded-md border border-neon/40 bg-gradient-to-r from-neon to-emerald-400 px-3 py-2.5 font-mono text-xs font-semibold text-ink-950 shadow-[0_0_12px_-4px_rgba(57,255,136,0.5)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon disabled:opacity-40 sm:flex-none"
         >
           {props.busy ? "Working…" : props.simulate ? "Approve paper" : "Approve live…"}
         </button>
@@ -763,7 +763,7 @@ function CandidateCard(props: {
           type="button"
           disabled={props.busy}
           onClick={props.onReject}
-          className="press rounded border border-line px-3 py-1.5 font-mono text-xs text-mute hover:border-danger hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:opacity-40"
+          className="press inline-flex min-h-[44px] flex-1 items-center justify-center rounded-md border border-line bg-ink-850 px-3 py-2.5 font-mono text-xs text-mute hover:border-danger hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:opacity-40 sm:flex-none"
         >
           Reject
         </button>

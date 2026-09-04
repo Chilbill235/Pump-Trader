@@ -366,7 +366,7 @@ export function BotView() {
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Session"
           value={
@@ -780,7 +780,7 @@ function StatCard({
       />
       <div className="relative">
         <p className="font-mono text-[10px] uppercase tracking-widest text-mute">{label}</p>
-        <p className="mt-1 truncate font-mono text-base text-white sm:text-lg">{value}</p>
+        <p className="mt-1 break-words font-mono text-base text-white sm:text-lg">{value}</p>
         {sub ? <p className="truncate text-[11px] text-mute">{sub}</p> : null}
       </div>
     </div>
@@ -804,19 +804,29 @@ function CfgField({
 }) {
   return (
     <label className="block space-y-1">
-      <span className="font-mono text-[11px] uppercase text-mute">{label}</span>
+      <span className="font-mono text-[10px] uppercase tracking-widest text-mute">{label}</span>
       <input
         type="number"
         value={value}
         step={step}
         min={min}
         max={max}
+        inputMode="decimal"
         onChange={(e) => {
           const n = Number(e.target.value);
           if (!Number.isFinite(n)) return;
           onChange(Math.min(max, Math.max(min, n)));
         }}
-        className="w-full rounded border border-line bg-ink-900 px-3 py-1.5 font-mono text-sm"
+        onBlur={(e) => {
+          const n = Number(e.target.value);
+          if (!Number.isFinite(n)) return;
+          const clamped = Math.min(max, Math.max(min, n));
+          if (clamped !== n) {
+            e.currentTarget.value = String(clamped);
+            onChange(clamped);
+          }
+        }}
+        className="w-full rounded-md border border-line bg-ink-850 px-3 py-1.5 font-mono text-sm focus:border-neon focus:bg-ink-900 focus:outline-none"
       />
     </label>
   );

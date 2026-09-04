@@ -843,7 +843,7 @@ export function QuickTradePanel(props: Props) {
                 setQuote(null);
                 setErrorInfo(null);
               }}
-              className={`press rounded-md border px-2 py-1 font-mono text-[11px] hover:border-neon hover:text-neon focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon ${
+              className={`press inline-flex min-h-[36px] items-center rounded-md border px-2.5 py-1.5 font-mono text-xs hover:border-neon hover:text-neon focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon ${
                 amount === preset
                   ? "border-neon/50 bg-neon/10 text-neon"
                   : "border-line bg-ink-850 text-mute"
@@ -862,7 +862,7 @@ export function QuickTradePanel(props: Props) {
                 setQuote(null);
                 setErrorInfo(null);
               }}
-              className="press ml-auto rounded-md border border-warn/40 bg-warn/10 px-2 py-1 font-mono text-[11px] text-warn hover:border-warn hover:bg-warn/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warn"
+              className="press ml-auto inline-flex min-h-[36px] items-center rounded-md border border-warn/40 bg-warn/10 px-2.5 py-1.5 font-mono text-xs text-warn hover:border-warn hover:bg-warn/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warn"
               title="Use entire balance minus fees"
             >
               MAX

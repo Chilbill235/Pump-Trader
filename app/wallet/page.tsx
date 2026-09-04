@@ -15,7 +15,6 @@ import { quoteTokenToSol } from "@/lib/token-value";
 import { compactNumber, shortenAddress, tokensToUi } from "@/lib/format";
 import { ConnectWalletButton } from "@/components/ConnectWalletButton";
 import { detectFromAdapters, type DetectedWallet } from "@/lib/wallet-detect";
-import { isMobileDevice } from "@/lib/mobile";
 import { notify } from "@/components/NotificationProvider";
 
 type Holding = {
@@ -246,7 +245,10 @@ function ConnectScreen() {
   const { wallets: adapterWallets } = useWallet();
   const [mounted, setMounted] = useState(false);
   const [wallets, setWallets] = useState<DetectedWallet[]>([]);
-  const isMobile = useMemo(() => (mounted ? isMobileDevice() : false), [mounted]);
+  const isMobile = useMemo(() => {
+    if (!mounted || typeof window === "undefined") return false;
+    return window.matchMedia("(max-width: 639px)").matches;
+  }, [mounted]);
 
   useEffect(() => {
     setMounted(true);
@@ -464,7 +466,16 @@ function BalanceCard(props: {
           </div>
           <p className="font-mono text-[10px] text-mute">via {props.walletName}</p>
           {props.endpoint ? (
-            <p className="font-mono text-[10px] text-mute">rpc {new URL(props.endpoint).hostname}</p>
+            <p className="break-all font-mono text-[10px] text-mute">
+              rpc{" "}
+              {(() => {
+                try {
+                  return new URL(props.endpoint!).hostname;
+                } catch {
+                  return props.endpoint;
+                }
+              })()}
+            </p>
           ) : null}
         </div>
       </div>

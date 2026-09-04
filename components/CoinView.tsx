@@ -12,7 +12,6 @@ import { CoinImage } from "./CoinImage";
 import { CopyButton } from "./CopyButton";
 import { QuickTradePanel } from "./QuickTradePanel";
 import { MobileTradeSheet } from "./MobileTradeSheet";
-import { isMobileDevice } from "@/lib/mobile";
 import { useWalletData } from "./WalletDataProvider";
 
 export function CoinView({ mint }: { mint: string }) {
@@ -23,14 +22,16 @@ export function CoinView({ mint }: { mint: string }) {
   const [onchainErr, setOnchainErr] = useState<string | null>(null);
   const [solUsd, setSolUsd] = useState<number | null>(null);
   const [tradeOpen, setTradeOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
+  const [isNarrow, setIsNarrow] = useState(false);
   const { holdings } = useWalletData();
 
   useEffect(() => {
-    const update = () => setIsMobile(isMobileDevice());
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 1023px)");
+    const update = () => setIsNarrow(mq.matches);
     update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
   }, []);
 
   useEffect(() => {
@@ -102,7 +103,7 @@ export function CoinView({ mint }: { mint: string }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 lg:grid-cols-[1.4fr_0.9fr]">
+      <div className="grid gap-4 xl:grid-cols-[1.4fr_0.9fr]">
         <section className="space-y-4">
           <div className="relative overflow-hidden rounded-xl border border-line glass">
             <div
@@ -202,7 +203,7 @@ export function CoinView({ mint }: { mint: string }) {
               <button
                 type="button"
                 onClick={() => setTradeOpen(true)}
-                className="press mt-4 w-full rounded-md border border-neon/40 bg-gradient-to-r from-neon to-emerald-400 px-4 py-3 font-mono text-sm font-semibold text-ink-950 shadow-[0_0_18px_-4px_rgba(57,255,136,0.5)] transition-all hover:from-neon/90 hover:shadow-[0_0_22px_-4px_rgba(57,255,136,0.7)] focus:outline-none focus-visible:ring-2 focus-visible:ring-neon active:scale-[0.99] lg:hidden"
+                className="press mt-4 w-full rounded-md border border-neon/40 bg-gradient-to-r from-neon to-emerald-400 px-4 py-3 font-mono text-sm font-semibold text-ink-950 shadow-[0_0_18px_-4px_rgba(57,255,136,0.5)] transition-all hover:from-neon/90 hover:shadow-[0_0_22px_-4px_rgba(57,255,136,0.7)] focus:outline-none focus-visible:ring-2 focus-visible:ring-neon active:scale-[0.99] xl:hidden"
               >
                 Buy / Sell
               </button>
@@ -211,7 +212,7 @@ export function CoinView({ mint }: { mint: string }) {
 
           <TokenFacts mint={mint} onchain={onchain} />
         </section>
-        <div className="hidden lg:block lg:sticky lg:top-20 lg:self-start">
+        <div className="hidden xl:block xl:sticky xl:top-20 xl:self-start">
           <QuickTradePanel
             mint={mint}
             name={name}
@@ -223,7 +224,7 @@ export function CoinView({ mint }: { mint: string }) {
       </div>
 
       <MobileTradeSheet
-        open={tradeOpen && isMobile}
+        open={tradeOpen && isNarrow}
         onClose={() => setTradeOpen(false)}
         mint={mint}
         name={name}

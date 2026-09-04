@@ -132,12 +132,13 @@ export function SettingsView() {
             placeholder="Search settings…"
             className="min-w-0 flex-1 rounded-md border border-line bg-ink-850 px-3 py-2 font-mono text-sm focus:border-neon focus:outline-none"
           />
-          <label className="flex items-center gap-1 rounded-md border border-line bg-ink-850 px-2 py-1 font-mono text-[11px] text-mute">
+          <label className="press flex min-h-[36px] cursor-pointer items-center gap-1.5 rounded-md border border-line bg-ink-850 px-3 py-1.5 font-mono text-[11px] text-mute hover:border-neon hover:text-neon">
             <input
               type="checkbox"
               checked={advanced}
               onChange={(e) => setAdvanced(e.target.checked)}
-              className="accent-neon"
+              className="h-4 w-4 accent-neon"
+              aria-label="Show advanced settings"
             />
             Advanced
           </label>
@@ -360,10 +361,10 @@ export function SettingsView() {
             >
               Export backup
             </button>
-            <label className="press cursor-pointer rounded-md border border-line bg-ink-850 px-3 py-2 font-mono text-xs text-mute hover:border-neon hover:text-neon">
-              Import backup
-              <input type="file" accept="application/json" onChange={importData} className="hidden" />
-            </label>
+            <label className="press flex cursor-pointer items-center gap-1.5 rounded-md border border-line bg-ink-850 px-2.5 py-2 font-mono text-[11px] text-mute hover:border-neon hover:text-neon">
+            <input type="file" accept="application/json" onChange={importData} className="sr-only" aria-label="Import backup JSON file" />
+            Import backup
+          </label>
           </div>
         </Section>
       ) : null}
@@ -485,6 +486,7 @@ function NumberField(props: {
           if (clamped !== n) setDraft(String(clamped));
           props.onChange(clamped);
         }}
+        inputMode="decimal"
         className="w-full rounded-md border border-line bg-ink-850 px-3 py-2 font-mono text-sm focus:border-neon focus:bg-ink-900 focus:outline-none"
       />
       <p className="text-[11px] text-mute">{props.hint}</p>
