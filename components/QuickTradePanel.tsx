@@ -12,6 +12,8 @@ import { simulateAndSend } from "@/lib/trade";
 import {
   MIN_BUY_SOL,
   MIN_SOL_RESERVED_FOR_FEES,
+  MIN_TRADE_USD,
+  validateAnyTokenAmount,
   validateBuyAmount,
   validateSellAmount,
 } from "@/lib/trade-limits";
@@ -22,11 +24,12 @@ import { useActiveAccountId } from "./AccountsProvider";
 import {
   fetchJupiterQuote,
   fetchJupiterUsdPrice,
+  getKnownTokenMeta,
   jupiterSimulateAndSend,
   shortTokenLabel,
   type JupiterQuote,
 } from "@/lib/jupiter";
-import { fetchMintDecimals } from "@/lib/token-value";
+import { fetchMintDecimals, getSolUsd } from "@/lib/token-value";
 import type { WalletToken } from "@/lib/portfolio";
 
 type HoldingLike = WalletToken & {
@@ -93,7 +96,7 @@ function classifyError(raw: string): ErrorHint {
       detail: `Wallet has ${have} SOL but this trade needs ~${need} SOL (size + ~${MIN_SOL_RESERVED_FOR_FEES} SOL for rent + fees).`,
       fixes: [
         `Top up the wallet by at least ${(Number(need) - Number(have)).toFixed(4)} SOL.`,
-        `Lower the trade size (minimum is ${MIN_BUY_SOL} SOL).`,
+        `Lower the trade size (app minimum is $${MIN_TRADE_USD.toFixed(2)} USD).`,
         `Sell an existing position to free up SOL.`,
       ],
     };
@@ -135,7 +138,8 @@ function classifyError(raw: string): ErrorHint {
       title: "Trade size too small",
       detail: raw,
       fixes: [
-        `Minimum buy is ${MIN_BUY_SOL} SOL on pump.fun's bonding curve.`,
+        `App minimum is $${MIN_TRADE_USD.toFixed(2)} USD per trade.`,
+        `On-chain minimum is ${MIN_BUY_SOL} SOL on pump.fun's bonding curve.`,
         "Raise the size, or trade on pump-amm if the coin graduated.",
       ],
     };
@@ -347,6 +351,12 @@ export function QuickTradePanel(props: Props) {
       };
     }
     // SPL balance
+    if (!wallet.publicKey) {
+      setInBalance(null);
+      return () => {
+        cancelled = true;
+      };
+    }
     (async () => {
       try {
         const resp = await connection.getParsedTokenAccountsByOwner(
@@ -380,9 +390,31 @@ export function QuickTradePanel(props: Props) {
 
   function parsedAmounts(): { inRaw: BN; outRaw?: BN } {
     if (side === "buy") {
-      const v = validateBuyAmount(amount);
-      if (!v.ok || !v.lamports) throw new Error(v.error ?? "Invalid SOL amount.");
-      return { inRaw: v.lamports };
+      // Pump bonding-curve buys have a hard on-chain minimum (~0.0011 SOL) and
+      // also a practical floor in `validateBuyAmount`. For Jupiter swaps there
+      // is no minimum: users can buy $0.10 of a token if they have the input
+      // token for it. We dispatch based on which venue we'll actually use.
+      const usePump = pumpSupported !== false && inMint === SOL_MINT;
+      if (usePump) {
+        const v = validateBuyAmount(amount);
+        if (!v.ok || !v.lamports) throw new Error(v.error ?? "Invalid SOL amount.");
+        // $1 USD floor for any trade.
+        if (solPrice != null && Number.isFinite(solPrice) && solPrice > 0) {
+          const usd = (Number(v.lamports.toString()) / 1e9) * solPrice;
+          if (usd < MIN_TRADE_USD) {
+            throw new Error(
+              `Minimum trade size is $${MIN_TRADE_USD.toFixed(2)} USD (~${(MIN_TRADE_USD / solPrice).toFixed(4)} SOL at $${solPrice.toFixed(2)}/SOL).`,
+            );
+          }
+        }
+        return { inRaw: v.lamports };
+      }
+      const v = validateAnyTokenAmount(amount, inDecimals);
+      if (!v.ok || !v.raw) throw new Error(v.error ?? "Invalid amount.");
+      // $1 USD floor for any trade. We need the USD price of the *input* mint.
+      // Fetch it lazily; if the price is unknown we let the user proceed and
+      // surface the check in the quote step instead of blocking here.
+      return { inRaw: v.raw };
     }
     const v = validateSellAmount(amount, outDecimals);
     if (!v.ok || !v.raw) throw new Error(v.error ?? "Invalid token amount.");
@@ -520,6 +552,43 @@ export function QuickTradePanel(props: Props) {
     setErrorInfo(null);
     try {
       const parsed = parsedAmounts();
+      // $1 USD minimum gate, applied to both pump and Jupiter. Uses the
+      // current SOL price for SOL input; for non-SOL input we look up the
+      // mint's USD price.
+      {
+        const usdPrice = solPrice ?? (await getSolUsd());
+        if (usdPrice != null && Number.isFinite(usdPrice) && usdPrice > 0) {
+          let usd: number | null = null;
+          if (side === "buy") {
+            if (inMint === SOL_MINT) {
+              usd = (Number(parsed.inRaw.toString()) / 1e9) * usdPrice;
+            } else {
+              const prices = await fetchJupiterUsdPrice([inMint]);
+              const p = prices[inMint];
+              if (p != null && Number.isFinite(p) && p > 0) {
+                const ui = Number(tokensToUi(parsed.inRaw, inDecimals));
+                usd = ui * p;
+              }
+            }
+          } else {
+            // Sell: we know the output SOL value is approx the inAmount's USD
+            // divided by SOL/USD. The trade is meaningful only if the position
+            // is worth at least $1 to begin with.
+            const ui = Number(tokensToUi(parsed.inRaw, outDecimals));
+            const known = getKnownTokenMeta(props.mint);
+            const p =
+              known?.symbol === "USDC" || known?.symbol === "USDT"
+                ? 1
+                : (await fetchJupiterUsdPrice([props.mint]))[props.mint] ?? null;
+            if (p != null && Number.isFinite(p) && p > 0) usd = ui * p;
+          }
+          if (usd != null && usd < MIN_TRADE_USD) {
+            throw new Error(
+              `Minimum trade size is $${MIN_TRADE_USD.toFixed(2)} USD. This trade is ≈ $${usd.toFixed(2)}.`,
+            );
+          }
+        }
+      }
       // Pre-flight SOL balance (only relevant for SOL input or pump program ATA rent).
       if (side === "buy" && !settings.simulateMode && wallet.publicKey && inMint === SOL_MINT) {
         const lamports = parsed.inRaw;
@@ -681,6 +750,15 @@ export function QuickTradePanel(props: Props) {
 
   return (
     <div className="rounded border border-line bg-ink-800 p-4">
+      {!wallet.connected ? (
+        <div className="mb-3 rounded border border-warn/40 bg-warn/10 p-2 text-xs text-warn">
+          <p className="font-mono font-semibold">Wallet not connected</p>
+          <p className="mt-1 text-mute">
+            You can still see live quotes. To execute a trade, connect Phantom (or another
+            supported wallet) from the header.
+          </p>
+        </div>
+      ) : null}
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <CoinImage src={props.imageUri ?? null} alt={symbol} size={28} />
@@ -752,27 +830,28 @@ export function QuickTradePanel(props: Props) {
             setErrorInfo(null);
           }}
           inputMode="decimal"
-          className="min-w-0 flex-1 rounded border border-line bg-ink-900 px-3 py-2 font-mono text-sm outline-none focus:border-neon"
+          placeholder={side === "buy" ? "0.0" : "amount of token"}
+          className="min-w-0 flex-1 rounded border border-line bg-ink-900 px-3 py-2 font-mono text-base outline-none focus:border-neon sm:text-sm"
         />
-        {side === "buy" ? (
-          <div className="flex shrink-0 gap-1">
-            {["0.01", "0.05", "0.1", "0.5"].map((preset) => (
-              <button
-                key={preset}
-                type="button"
-                onClick={() => {
-                  setAmount(preset);
-                  setQuote(null);
-                  setErrorInfo(null);
-                }}
-                className="rounded border border-line px-2 font-mono text-[11px] text-mute hover:border-neon hover:text-neon"
-              >
-                {preset}
-              </button>
-            ))}
-          </div>
-        ) : null}
       </div>
+      {side === "buy" ? (
+        <div className="mb-2 flex flex-wrap gap-1">
+          {["0.001", "0.01", "0.05", "0.1", "0.5", "1"].map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              onClick={() => {
+                setAmount(preset);
+                setQuote(null);
+                setErrorInfo(null);
+              }}
+              className="rounded border border-line px-2 py-1 font-mono text-[11px] text-mute active:border-neon active:text-neon"
+            >
+              {preset}
+            </button>
+          ))}
+        </div>
+      ) : null}
       {amountUsd != null ? (
         <p className="-mt-0 mb-2 font-mono text-[11px] text-mute">
           ≈ ${amountUsd.toFixed(2)} USD
@@ -878,9 +957,9 @@ export function QuickTradePanel(props: Props) {
         <p className="rounded border border-dashed border-line bg-ink-900 p-3 text-center font-mono text-xs text-mute">
           {side === "buy"
             ? inMint === SOL_MINT && pumpSupported !== false
-              ? `Pick how much SOL to spend. Min ${MIN_BUY_SOL} SOL.`
-              : "Pick how much to spend. Routes through Jupiter."
-            : "Pick how many tokens to sell."}
+              ? `Pick how much SOL to spend. Min $${MIN_TRADE_USD.toFixed(2)} USD (~${solPrice ? (MIN_TRADE_USD / solPrice).toFixed(4) : "0.0001"} SOL).`
+              : `Pick how much to spend. Min $${MIN_TRADE_USD.toFixed(2)} USD. Routes through Jupiter.`
+            : `Pick how many tokens to sell. Min $${MIN_TRADE_USD.toFixed(2)} USD.`}
         </p>
       )}
 

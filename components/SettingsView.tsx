@@ -95,13 +95,15 @@ export function SettingsView() {
         <input
           type="number"
           min={0.1}
-          max={50}
           step={0.1}
           value={settings.slippagePct}
-          onChange={(e) => update({ slippagePct: Number(e.target.value) || 5 })}
+          onChange={(e) => {
+            const n = Number(e.target.value);
+            if (Number.isFinite(n) && n >= 0.1) update({ slippagePct: n });
+          }}
           className="w-full rounded border border-line bg-ink-800 px-3 py-2 font-mono text-sm"
         />
-        <p className="text-[11px] text-mute">Default 5%. Applied to buy max SOL / sell min SOL.</p>
+        <p className="text-[11px] text-mute">Default 5%. Any positive value allowed.</p>
       </label>
 
       <Toggle
@@ -150,35 +152,31 @@ export function SettingsView() {
         hint="Skip if weighted score is below this (default 0.55)."
         value={settings.minScore}
         min={0}
-        max={1}
         step={0.01}
         onChange={(v) => update({ minScore: v })}
       />
       <NumberField
         label="max_position_sol"
-        hint="Risk brake. Queue size and max cost per mint (default 0.1)."
+        hint="Risk brake. Queue size and max cost per mint (default 0.1). Any value allowed."
         value={settings.maxPositionSol}
-        min={0.001}
-        max={100}
-        step={0.01}
+        min={0.0001}
+        step={0.0001}
         onChange={(v) => update({ maxPositionSol: v })}
       />
       <NumberField
         label="max_open_positions"
-        hint="Do not open more than this many positions at once (default 5)."
+        hint="Do not open more than this many positions at once (default 5). Any value allowed."
         value={settings.maxOpenPositions}
         min={1}
-        max={100}
         step={1}
         onChange={(v) => update({ maxOpenPositions: Math.round(v) })}
       />
       <NumberField
         label="daily_loss_limit"
-        hint="Do not queue if today's pipeline spend + realized loss ≥ this SOL (default 0.3)."
+        hint="Do not queue if today's pipeline spend + realized loss ≥ this SOL (default 0.3). Any value."
         value={settings.dailyLossLimit}
         min={0}
-        max={1000}
-        step={0.05}
+        step={0.0001}
         onChange={(v) => update({ dailyLossLimit: v })}
       />
       <NumberField
@@ -186,16 +184,14 @@ export function SettingsView() {
         hint="Basic filter. Empty-curve skip (default 5). Count is estimated when pump.fun omits holders."
         value={settings.minUniqueBuyers}
         min={0}
-        max={1000}
         step={1}
         onChange={(v) => update({ minUniqueBuyers: Math.round(v) })}
       />
       <NumberField
         label="bonding_curve_pct max"
-        hint="Still-early filter (default 40)."
+        hint="Still-early filter (default 40). 0–100."
         value={settings.maxBondingCurvePct}
         min={0}
-        max={100}
         step={1}
         onChange={(v) => update({ maxBondingCurvePct: v })}
       />
@@ -204,7 +200,6 @@ export function SettingsView() {
         hint="Must survive the first N minutes (default 2). Age skips are retried."
         value={settings.minAgeMinutes}
         min={0}
-        max={1440}
         step={0.5}
         onChange={(v) => update({ minAgeMinutes: v })}
       />
@@ -275,7 +270,6 @@ function NumberField(props: {
   hint: string;
   value: number;
   min: number;
-  max: number;
   step: number;
   onChange: (v: number) => void;
 }) {
@@ -285,13 +279,21 @@ function NumberField(props: {
       <input
         type="number"
         min={props.min}
-        max={props.max}
         step={props.step}
         value={props.value}
         onChange={(e) => {
-          const n = Number(e.target.value);
+          const raw = e.target.value;
+          if (raw === "" || raw === "-") {
+            props.onChange(props.min);
+            return;
+          }
+          const n = Number(raw);
           if (!Number.isFinite(n)) return;
-          props.onChange(Math.min(props.max, Math.max(props.min, n)));
+          props.onChange(n < props.min ? props.min : n);
+        }}
+        onBlur={(e) => {
+          const n = Number(e.target.value);
+          if (Number.isFinite(n) && n < props.min) props.onChange(props.min);
         }}
         className="w-full rounded border border-line bg-ink-800 px-3 py-2 font-mono text-sm"
       />

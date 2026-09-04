@@ -14,7 +14,7 @@ import { isPublicRpc } from "@/lib/settings";
 import { PUBLIC_RPC_WARNING } from "@/lib/constants";
 import { BOT_SESSION_KEY } from "@/lib/constants";
 import { safeReadScoped, removeScoped } from "@/lib/accounts";
-import { isInAppBrowser, isMobileDevice, SUPPORTED_MOBILE_WALLETS, deepLinkOpen, openUniversal } from "@/lib/mobile";
+import { SUPPORTED_MOBILE_WALLETS, deepLinkOpen, openUniversal } from "@/lib/mobile";
 
 const NAV = [
   { href: "/", label: "Markets" },
@@ -140,8 +140,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connected]);
 
-  const mobile = isMobileDevice();
-
   return (
     <div className="min-h-screen bg-ink-950 text-zinc-100">
       <header className="sticky top-0 z-30 border-b border-line bg-ink-900/95 backdrop-blur">
@@ -229,20 +227,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     : `${sol.toFixed(4)} SOL`}
               </span>
             ) : null}
-            {mobile && !isInAppBrowser() ? (
-              <button
-                type="button"
-                onClick={() => setShowMobileConnect(true)}
-                className="shrink-0 rounded bg-neon px-3 py-1.5 font-mono text-xs text-ink-950"
-              >
-                Connect
-              </button>
-            ) : null}
-            {(!mobile || isInAppBrowser()) && mounted ? (
+            {mounted ? (
               <div className="shrink-0" suppressHydrationWarning>
                 <WalletMultiButton />
               </div>
             ) : null}
+            <button
+              type="button"
+              onClick={() => setShowMobileConnect(true)}
+              className="shrink-0 rounded border border-line bg-ink-800 px-2 py-1 font-mono text-[11px] text-mute hover:border-neon hover:text-neon sm:hidden"
+              title="Open in a wallet app"
+            >
+              Open in wallet ↗
+            </button>
             <AccountMenu
               open={acctMenuOpen}
               onToggle={() => setAcctMenuOpen((v) => !v)}
@@ -386,6 +383,8 @@ function MobileConnectSheet(props: { onClose: () => void }) {
   const [copied, setCopied] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     const onClick = (e: MouseEvent) => {
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) props.onClose();
     };
@@ -397,59 +396,92 @@ function MobileConnectSheet(props: { onClose: () => void }) {
     return () => {
       document.removeEventListener("mousedown", onClick);
       document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
     };
   }, [props]);
   const url = typeof window !== "undefined" ? window.location.href : "";
   return (
     <div
       ref={wrapRef}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 sm:items-center sm:p-4"
+      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/80 sm:items-center sm:p-4"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) props.onClose();
+      }}
     >
-      <div className="w-full max-w-md rounded-t-xl border border-line bg-ink-900 p-4 shadow-2xl sm:rounded-xl">
-        <h2 className="font-mono text-sm text-neon">Connect on mobile</h2>
-        <p className="mt-1 text-xs text-mute">
-          No browser extension on iPhone / Android. Open this page inside your wallet&apos;s browser,
-          or use a universal link to jump there.
-        </p>
-        <div className="mt-3 space-y-2">
-          {SUPPORTED_MOBILE_WALLETS.map((w) => (
-            <button
-              key={w}
-              type="button"
-              onClick={() => openUniversal(deepLinkOpen(w))}
-              className="flex w-full items-center justify-between rounded border border-line bg-ink-800 px-3 py-2 text-left hover:border-neon"
-            >
-              <span className="font-mono text-sm">Open in {w}</span>
-              <span className="font-mono text-[11px] text-mute">↗</span>
-            </button>
-          ))}
-        </div>
-        <div className="mt-4 rounded border border-line bg-ink-800 p-3">
-          <p className="font-mono text-[11px] uppercase text-mute">URL</p>
-          <p className="mt-1 break-all font-mono text-xs">{url}</p>
+      <div
+        className="flex w-full max-w-md flex-col rounded-t-2xl border border-line bg-ink-900 shadow-2xl sm:rounded-2xl"
+        style={{
+          maxHeight:
+            "calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom))",
+        }}
+      >
+        <div
+          className="flex shrink-0 items-center justify-between border-b border-line/60 px-4 py-3"
+          style={{ paddingTop: "calc(0.75rem + env(safe-area-inset-top))" }}
+        >
+          <h2 className="font-mono text-sm text-neon">Connect on mobile</h2>
           <button
             type="button"
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(url);
-                setCopied(true);
-                setTimeout(() => setCopied(false), 1500);
-              } catch {
-                // ignore
-              }
-            }}
-            className="mt-2 rounded border border-line px-2 py-1 font-mono text-[11px] text-mute hover:border-neon hover:text-neon"
+            onClick={props.onClose}
+            className="rounded border border-line px-2 py-1 font-mono text-xs text-mute"
+            aria-label="Close"
           >
-            {copied ? "Copied" : "Copy URL"}
+            ✕
           </button>
         </div>
-        <button
-          type="button"
-          onClick={props.onClose}
-          className="mt-3 w-full rounded border border-line py-2 font-mono text-xs text-mute"
+        <div
+          className="min-h-0 flex-1 overflow-y-auto p-4 scroll-thin"
+          style={{ WebkitOverflowScrolling: "touch" }}
         >
-          Close
-        </button>
+          <p className="text-xs text-mute">
+            Pick a wallet. The page will open inside the wallet&apos;s browser with the
+            connection already prepared.
+          </p>
+          <div className="mt-3 space-y-2">
+            {SUPPORTED_MOBILE_WALLETS.map((w) => (
+              <button
+                key={w}
+                type="button"
+                onClick={() => openUniversal(deepLinkOpen(w))}
+                className="flex w-full items-center justify-between rounded border border-line bg-ink-800 px-4 py-3 text-left text-base active:border-neon"
+              >
+                <span className="font-mono">Open in {w}</span>
+                <span className="font-mono text-sm text-mute">↗</span>
+              </button>
+            ))}
+          </div>
+          <div className="mt-4 rounded border border-line bg-ink-800 p-3">
+            <p className="font-mono text-[11px] uppercase text-mute">URL</p>
+            <p className="mt-1 break-all font-mono text-xs">{url}</p>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(url);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1500);
+                } catch {
+                  // ignore
+                }
+              }}
+              className="mt-2 rounded border border-line px-3 py-1.5 font-mono text-xs text-mute"
+            >
+              {copied ? "Copied" : "Copy URL"}
+            </button>
+          </div>
+        </div>
+        <div
+          className="shrink-0 border-t border-line/60 px-4 py-3"
+          style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
+        >
+          <button
+            type="button"
+            onClick={props.onClose}
+            className="w-full rounded border border-line py-2.5 font-mono text-sm text-mute"
+          >
+            Close
+          </button>
+        </div>
       </div>
     </div>
   );

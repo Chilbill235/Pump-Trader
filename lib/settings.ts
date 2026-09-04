@@ -61,7 +61,8 @@ function numInRange(
   max: number,
 ): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
-  if (value < min || value > max) return fallback;
+  if (value < min) return fallback;
+  if (value > max) return value; // allow over-cap (e.g. user wants to type any amount)
   return value;
 }
 
@@ -89,25 +90,25 @@ export function loadSettings(accountId: string | null): AppSettings {
       maxPositionSol: numInRange(
         parsed.maxPositionSol,
         DEFAULT_MAX_POSITION_SOL,
-        0.001,
-        100,
+        0.0001,
+        1_000_000,
       ),
       maxOpenPositions: Math.round(
         numInRange(
           parsed.maxOpenPositions,
           DEFAULT_MAX_OPEN_POSITIONS,
           1,
-          100,
+          1_000_000,
         ),
       ),
       dailyLossLimit: numInRange(
         parsed.dailyLossLimit,
         DEFAULT_DAILY_LOSS_LIMIT,
         0,
-        1000,
+        1_000_000,
       ),
       minUniqueBuyers: Math.round(
-        numInRange(parsed.minUniqueBuyers, DEFAULT_MIN_UNIQUE_BUYERS, 0, 1000),
+        numInRange(parsed.minUniqueBuyers, DEFAULT_MIN_UNIQUE_BUYERS, 0, 1_000_000),
       ),
       maxBondingCurvePct: numInRange(
         parsed.maxBondingCurvePct,
@@ -119,14 +120,14 @@ export function loadSettings(accountId: string | null): AppSettings {
         parsed.minAgeMinutes,
         DEFAULT_MIN_AGE_MINUTES,
         0,
-        24 * 60,
+        24 * 60 * 365,
       ),
       requireMetadata:
         typeof parsed.requireMetadata === "boolean"
           ? parsed.requireMetadata
           : true,
-      takeProfitPct: numInRange(parsed.takeProfitPct, 20, 1, 1000),
-      stopLossPct: numInRange(parsed.stopLossPct, 15, 1, 99),
+      takeProfitPct: numInRange(parsed.takeProfitPct, 20, 0.1, 1_000_000),
+      stopLossPct: numInRange(parsed.stopLossPct, 15, 0.1, 1_000_000),
     };
   } catch {
     return DEFAULT_SETTINGS;

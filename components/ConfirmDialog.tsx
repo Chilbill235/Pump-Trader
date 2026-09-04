@@ -48,7 +48,7 @@ export function ConfirmDialog({
   const titleId = "confirm-dialog-title";
   return (
     <div
-      className="fixed inset-0 z-50 flex items-stretch justify-center overflow-hidden bg-black/70 sm:items-center sm:p-4"
+      className="fixed inset-0 z-[100] flex items-stretch justify-center overflow-hidden bg-black/80 sm:items-center sm:p-4"
       role="presentation"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onCancel();

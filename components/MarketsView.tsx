@@ -7,6 +7,8 @@ import { compactNumber, formatUsd, shortenAddress, timeAgo } from "@/lib/format"
 import { CoinImage } from "./CoinImage";
 import { CopyButton } from "./CopyButton";
 import { QuickTradePanel } from "./QuickTradePanel";
+import { MobileTradeSheet } from "./MobileTradeSheet";
+import { isMobileDevice } from "@/lib/mobile";
 
 type Kind = "trending" | "newest";
 
@@ -18,6 +20,14 @@ export function MarketsView() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeMint, setActiveMint] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const update = () => setIsMobile(isMobileDevice());
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
 
   const load = useCallback(async (nextKind: Kind, nextQ: string) => {
     setLoading(true);
@@ -148,24 +158,27 @@ export function MarketsView() {
                     <li
                       key={c.mint}
                       onClick={() => setActiveMint(c.mint)}
-                      className={`flex cursor-pointer items-center gap-2 px-3 py-2 ${
+                      className={`flex cursor-pointer items-center gap-2 px-3 py-3 active:bg-ink-800 ${
                         active ? "bg-neon/10" : "hover:bg-ink-800/80"
                       }`}
                     >
-                      <CoinImage src={c.imageUri ?? null} alt={c.symbol} size={28} />
+                      <CoinImage src={c.imageUri ?? null} alt={c.symbol} size={32} />
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm">{c.name}</p>
+                        <p className="truncate text-sm font-medium">{c.name}</p>
                         <p className="truncate font-mono text-[11px] text-mute">
                           {c.symbol} · {formatUsd(c.usdMarketCap ?? null)}
                         </p>
                       </div>
                       <span
-                        className={`font-mono text-[11px] ${
-                          c.complete ? "text-warn" : "text-neon"
+                        className={`shrink-0 rounded border px-2 py-0.5 font-mono text-[11px] ${
+                          c.complete
+                            ? "border-warn/40 text-warn"
+                            : "border-neon/40 text-neon"
                         }`}
                       >
                         {c.complete ? "grad" : "curve"}
                       </span>
+                      <span className="shrink-0 font-mono text-[11px] text-neon">›</span>
                     </li>
                   );
                 })}
@@ -248,7 +261,8 @@ export function MarketsView() {
           )}
         </div>
 
-        <aside className="lg:sticky lg:top-20 lg:self-start">
+        {/* Desktop inline panel */}
+        <aside className="hidden lg:sticky lg:top-20 lg:block lg:self-start">
           {activeMint ? (
             activeCoin ? (
               <QuickTradePanel
@@ -282,6 +296,16 @@ export function MarketsView() {
           ) : null}
         </aside>
       </div>
+
+      {/* Mobile bottom sheet (pops up over the list) */}
+      <MobileTradeSheet
+        open={!!activeMint && isMobile}
+        onClose={() => setActiveMint(null)}
+        mint={activeMint}
+        name={activeCoin?.name}
+        symbol={activeCoin?.symbol}
+        imageUri={activeCoin?.imageUri}
+      />
     </div>
   );
 }

@@ -132,7 +132,7 @@ export function StartBotModal({ open, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-stretch justify-center overflow-hidden bg-black/70 sm:items-center sm:p-4"
+      className="fixed inset-0 z-[90] flex items-stretch justify-center overflow-hidden bg-black/80 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="start-bot-title"
@@ -223,37 +223,37 @@ export function StartBotModal({ open, onClose }: Props) {
           </Section>
 
           <Section title="Risk caps">
+            <p className="mb-2 text-[11px] text-mute">
+              Type any value. Each field has a sensible minimum; there is no maximum cap so
+              you can size trades the way you want.
+            </p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field
                 label="Max trades this run"
                 value={maxTrades}
                 step={1}
                 min={1}
-                max={500}
                 onChange={(v) => setMaxTrades(Math.max(1, Math.round(v)))}
               />
               <Field
                 label="SOL per coin"
                 value={perCoinCapSol}
-                step={0.01}
-                min={0.001}
-                max={5}
-                onChange={(v) => setPerCoinCapSol(Math.max(0.001, v))}
+                step={0.0001}
+                min={0.0001}
+                onChange={(v) => setPerCoinCapSol(Math.max(0.0001, v))}
               />
               <Field
                 label="Max open positions"
                 value={maxOpenPos}
                 step={1}
                 min={1}
-                max={50}
                 onChange={(v) => setMaxOpenPos(Math.max(1, Math.round(v)))}
               />
               <Field
                 label="Daily loss limit SOL"
                 value={dailyLossSol}
-                step={0.05}
+                step={0.0001}
                 min={0}
-                max={50}
                 onChange={(v) => setDailyLossSol(Math.max(0, v))}
               />
               <Field
@@ -261,24 +261,21 @@ export function StartBotModal({ open, onClose }: Props) {
                 value={slippage}
                 step={0.1}
                 min={0.1}
-                max={50}
                 onChange={(v) => setSlippage(Math.max(0.1, v))}
               />
               <Field
                 label="Take profit %"
                 value={tpPct}
-                step={1}
-                min={1}
-                max={1000}
-                onChange={(v) => setTpPct(Math.max(1, v))}
+                step={0.5}
+                min={0.1}
+                onChange={(v) => setTpPct(Math.max(0.1, v))}
               />
               <Field
                 label="Stop loss %"
                 value={slPct}
-                step={1}
-                min={1}
-                max={99}
-                onChange={(v) => setSlPct(Math.max(1, Math.min(99, v)))}
+                step={0.5}
+                min={0.1}
+                onChange={(v) => setSlPct(Math.max(0.1, v))}
               />
             </div>
           </Section>
@@ -380,14 +377,12 @@ function Field({
   value,
   step,
   min,
-  max,
   onChange,
 }: {
   label: string;
   value: number;
   step: number;
   min: number;
-  max: number;
   onChange: (v: number) => void;
 }) {
   return (
@@ -398,11 +393,19 @@ function Field({
         value={value}
         step={step}
         min={min}
-        max={max}
         onChange={(e) => {
-          const n = Number(e.target.value);
+          const raw = e.target.value;
+          if (raw === "" || raw === "-") {
+            onChange(min);
+            return;
+          }
+          const n = Number(raw);
           if (!Number.isFinite(n)) return;
-          onChange(Math.min(max, Math.max(min, n)));
+          onChange(n < min ? min : n);
+        }}
+        onBlur={(e) => {
+          const n = Number(e.target.value);
+          if (Number.isFinite(n) && n < min) onChange(min);
         }}
         className="w-full rounded border border-line bg-ink-800 px-3 py-1.5 font-mono text-sm"
       />

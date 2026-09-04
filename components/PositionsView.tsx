@@ -6,6 +6,7 @@ import BN from "bn.js";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { lamportsToSol, pct, shortenAddress, tokensToUi } from "@/lib/format";
+import { MIN_HOLDING_USD_TO_TRADE } from "@/lib/trade-limits";
 import {
   loadPositions,
   pnlPct,
@@ -35,8 +36,6 @@ type Holding = WalletToken & {
   isPumpCoin: boolean;
   err?: string;
 };
-
-const SOL_MINT = "So11111111111111111111111111111111111111112";
 
 export function PositionsView() {
   const { connection } = useConnection();
@@ -102,7 +101,11 @@ export function PositionsView() {
           return null;
         }
       });
-      const eligible = tokens.filter((t) => t.mint !== SOL_MINT);
+      // Show every token the wallet holds, including dust and wrapped SOL
+      // (native SOL is still shown separately at the top of the page for
+      // convenience). The user explicitly asked for a complete list of
+      // everything in the wallet.
+      const eligible = tokens;
       // Fall back to the well-known token list (USDC, USDT, BONK, JUP, …) when
       // the pump-fun metadata endpoint returns nothing.
       const enrichedMeta = eligible.map((t) => {
@@ -273,12 +276,16 @@ export function PositionsView() {
           Connect your wallet to load your positions and on-wallet holdings.
         </div>
       ) : (
-        <>
-          <section className="rounded border border-line bg-ink-800">
-            <header className="flex items-center justify-between border-b border-line px-3 py-2">
-              <h2 className="font-mono text-xs uppercase tracking-wide text-mute">
-                Wallet holdings {holdingsLoading ? "· loading?" : `· ${holdings.length}`}
-              </h2>
+      <>
+        <section className="rounded border border-line bg-ink-800">
+          <header className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-3 py-2">
+            <h2 className="font-mono text-xs uppercase tracking-wide text-mute">
+              Wallet holdings {holdingsLoading ? "· loading?" : `· ${holdings.length}`}
+            </h2>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[11px] text-mute">
+                {holdings.length} token{holdings.length === 1 ? "" : "s"} · everything in this wallet
+              </span>
               <button
                 type="button"
                 onClick={() => void refreshWallet()}
@@ -286,31 +293,33 @@ export function PositionsView() {
               >
                 refresh
               </button>
-            </header>
-            {holdingsErr ? (
-              <p className="p-3 text-xs text-danger">{holdingsErr}</p>
-            ) : holdings.length === 0 && !holdingsLoading ? (
-              <p className="p-6 text-center text-sm text-mute">
-                No SPL tokens found in this wallet.
-              </p>
-            ) : (
-              <ul className="divide-y divide-line">
-                {holdings.map((h) => (
-                  <HoldingRow
-                    key={h.mint}
-                    holding={h}
-                    onTrade={() => setTradeMint(h.mint)}
-                    solUsd={solUsd}
-                  />
-                ))}
-              </ul>
-            )}
-            <p className="border-t border-line/60 px-3 py-2 text-[11px] text-mute">
-              Tap a token to trade. Pump.fun bonding-curve / pump-amm coins use the pump program.
-              Everything else (USDC, BONK, JUP, memecoins, etc.) routes through Jupiter so you can
-              buy or sell using any token in your wallet that has enough balance.
+            </div>
+          </header>
+          {holdingsErr ? (
+            <p className="p-3 text-xs text-danger">{holdingsErr}</p>
+          ) : holdings.length === 0 && !holdingsLoading ? (
+            <p className="p-6 text-center text-sm text-mute">
+              No SPL tokens found in this wallet.
             </p>
-          </section>
+          ) : (
+            <ul className="divide-y divide-line">
+              {holdings.map((h) => (
+                <HoldingRow
+                  key={h.mint}
+                  holding={h}
+                  onTrade={() => setTradeMint(h.mint)}
+                  solUsd={solUsd}
+                />
+              ))}
+            </ul>
+          )}
+          <p className="border-t border-line/60 px-3 py-2 text-[11px] text-mute">
+            Tap a token to trade. Pump.fun bonding-curve / pump-amm coins use the pump program.
+            Everything else (USDC, BONK, JUP, memecoins, etc.) routes through Jupiter so you can
+            buy or sell using any token in your wallet that has enough balance. The app requires
+            at least $1 USD per trade — sub-$1 dust is shown but the Trade button is disabled.
+          </p>
+        </section>
 
           {tradeMint ? (
             <section className="rounded border border-line bg-ink-800 p-3">
@@ -466,7 +475,13 @@ function HoldingRow({
       <button
         type="button"
         onClick={onTrade}
-        className="shrink-0 rounded border border-line px-2 py-1 font-mono text-[11px] text-mute hover:border-neon hover:text-neon"
+        disabled={usd != null && usd < MIN_HOLDING_USD_TO_TRADE}
+        title={
+          usd != null && usd < MIN_HOLDING_USD_TO_TRADE
+            ? `Below $${MIN_HOLDING_USD_TO_TRADE.toFixed(2)} minimum — top up or sell to recoup fees first.`
+            : undefined
+        }
+        className="shrink-0 rounded border border-line px-2 py-1 font-mono text-[11px] text-mute hover:border-neon hover:text-neon disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line disabled:hover:text-mute"
       >
         Trade
       </button>

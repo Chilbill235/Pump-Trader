@@ -83,16 +83,16 @@ export async function simulateAndSend(args: {
   }
 
   // Pre-flight balance check so we never try to sign an obviously-underfunded tx.
-  // pump.fun bonding-curve buys may create an ATA, costing ~0.002 SOL rent.
+  // pump.fun bonding-curve buys may create an ATA, costing ~0.00203928 SOL rent.
   if (args.side === "buy") {
     const lamports = args.solLamports?.toNumber() ?? 0;
-    const bufferLamports = 10_000_000; // 0.01 SOL: ATA rent + priority fee + base tx fee
+    const bufferLamports = 2_100_000; // 0.0021 SOL: ATA rent + priority fee + base tx fee
     const bal = await args.connection.getBalance(user);
     if (bal < lamports + bufferLamports) {
       const have = (bal / 1e9).toFixed(4);
       const need = ((lamports + bufferLamports) / 1e9).toFixed(4);
       throw new Error(
-        `Insufficient SOL: wallet has ${have} SOL, trade needs ~${need} SOL (size + ~0.01 SOL for ATA rent + fees). Top up the wallet or lower the per-coin cap.`,
+        `Insufficient SOL: wallet has ${have} SOL, trade needs ~${need} SOL (size + ~0.0021 SOL for ATA rent + fees). Top up the wallet or lower the per-coin cap.`,
       );
     }
   }
