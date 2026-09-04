@@ -358,7 +358,8 @@ body.modal-open {
 [data-tip] {
   position: relative;
 }
-[data-tip]:hover::after {
+[data-tip]:hover::after,
+[data-tip]:focus-visible::after {
   content: attr(data-tip);
   position: absolute;
   bottom: calc(100% + 6px);
@@ -375,4 +376,12 @@ body.modal-open {
   pointer-events: none;
   z-index: 60;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+/* Below variant — used for elements inside the sticky header so the
+   tooltip doesn't go off the top of the viewport when the user scrolls. */
+[data-tip-pos="bottom"]:hover::after,
+[data-tip-pos="bottom"]:focus-visible::after {
+  top: calc(100% + 6px);
+  bottom: auto;
 }

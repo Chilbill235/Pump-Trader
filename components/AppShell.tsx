@@ -413,6 +413,7 @@ function BalanceChip(props: {
           ? `via ${props.endpoint}${props.live ? " · live" : " · polled"}`
           : "Wallet balance"
       }
+      data-tip-pos="bottom"
       className="press hidden items-center gap-1.5 rounded-md border border-line bg-ink-800/80 px-2.5 py-1.5 font-mono text-xs hover:border-neon hover:bg-ink-800 sm:inline-flex"
     >
       <span aria-hidden className="relative flex h-1.5 w-1.5">
@@ -450,6 +451,7 @@ function StatusPill(props: { simulate: boolean; botRunning: boolean; autoTrade: 
     return (
       <span
         data-tip="Auto-trade bot is running"
+        data-tip-pos="bottom"
         className="hidden items-center gap-1.5 rounded-md border border-neon/40 bg-neon/10 px-2.5 py-1 font-mono text-[11px] font-semibold text-neon sm:inline-flex"
       >
         <span className="relative flex h-1.5 w-1.5">
@@ -464,6 +466,7 @@ function StatusPill(props: { simulate: boolean; botRunning: boolean; autoTrade: 
     return (
       <span
         data-tip="Auto-trade armed"
+        data-tip-pos="bottom"
         className="hidden items-center gap-1.5 rounded-md border border-warn/40 bg-warn/10 px-2.5 py-1 font-mono text-[11px] font-semibold text-warn sm:inline-flex"
       >
         <span className="h-1.5 w-1.5 rounded-full bg-warn" />
@@ -474,6 +477,7 @@ function StatusPill(props: { simulate: boolean; botRunning: boolean; autoTrade: 
   return (
     <span
       data-tip={props.simulate ? "Simulate mode — paper trades only" : "Live mode — real SOL trades"}
+      data-tip-pos="bottom"
       className={`hidden items-center gap-1.5 rounded-md border px-2.5 py-1 font-mono text-[11px] font-semibold sm:inline-flex ${
         props.simulate
           ? "border-warn/40 bg-warn/10 text-warn"
