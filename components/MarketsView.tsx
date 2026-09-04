@@ -169,31 +169,31 @@ export function MarketsView() {
         </div>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
+      <div className="grid gap-4 lg:grid-cols-[1.4fr_0.9fr]">
         <div className="overflow-hidden rounded-xl border border-line-soft bg-ink-900/60 shadow-card">
           {loading ? <MarketsSkeleton /> : coins.length === 0 && !error ? (
             <EmptyMarkets />
           ) : (
             <>
               {/* Mobile cards */}
-              <ul className="divide-y divide-line/60 sm:hidden">
+              <ul className="divide-y divide-line-soft sm:hidden">
                 {coins.map((c) => {
                   const active = activeMint === c.mint;
                   return (
                     <li
                       key={c.mint}
                       onClick={() => setActiveMint(c.mint)}
-                      className={`flex cursor-pointer items-center gap-3 px-3 py-3 transition-colors ${
+                      className={`relative flex cursor-pointer items-center gap-3 px-3 py-3 transition-colors ${
                         active
-                          ? "bg-neon/10"
-                          : "hover:bg-ink-800/80 active:bg-ink-800"
+                          ? "border-l-2 border-l-neon bg-neon/10 pl-[calc(0.75rem-2px)]"
+                          : "border-l-2 border-l-transparent hover:bg-ink-800/80 active:bg-ink-800"
                       }`}
                     >
                       <CoinImage src={c.imageUri ?? null} alt={c.symbol} size={36} />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <p className="truncate text-sm font-medium">{c.name}</p>
-                          <span className="font-mono text-[11px] text-mute-2">{c.symbol}</span>
+                          <span className="font-mono text-[11px] text-mute-2">${c.symbol}</span>
                         </div>
                         <p className="truncate font-mono text-[11px] text-mute">
                           {formatUsd(c.usdMarketCap ?? null)} ·{" "}
@@ -205,7 +205,7 @@ export function MarketsView() {
                         </p>
                       </div>
                       <span
-                        className={`shrink-0 rounded border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide ${
+                        className={`shrink-0 rounded-md border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide ${
                           c.complete
                             ? "border-warn/40 bg-warn/5 text-warn"
                             : "border-neon/40 bg-neon/5 text-neon"
@@ -220,16 +220,15 @@ export function MarketsView() {
               </ul>
               {/* Desktop table */}
               <div className="hidden overflow-x-auto sm:block">
-                <table className="w-full min-w-[860px] text-left text-sm">
-                  <thead className="bg-ink-850 font-mono text-[10px] uppercase tracking-widest text-mute">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-ink-850/80 font-mono text-[10px] uppercase tracking-widest text-mute backdrop-blur">
                     <tr>
                       <th className="px-3 py-2.5">Coin</th>
-                      <th className="px-3 py-2.5">Mint</th>
+                      <th className="hidden px-3 py-2.5 lg:table-cell">Mint</th>
                       <th className="px-3 py-2.5 text-right">MC USD</th>
-                      <th className="px-3 py-2.5 text-right">MC SOL</th>
+                      <th className="hidden px-3 py-2.5 text-right md:table-cell">MC SOL</th>
                       <th className="px-3 py-2.5">Status</th>
-                      <th className="px-3 py-2.5">Last</th>
-                      <th className="px-3 py-2.5"></th>
+                      <th className="hidden px-3 py-2.5 md:table-cell">Last</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -238,23 +237,27 @@ export function MarketsView() {
                       return (
                         <tr
                           key={c.mint}
-                          className={`group cursor-pointer border-t border-line/40 transition-colors ${
+                          className={`group relative cursor-pointer border-t border-line-soft/40 transition-colors ${
                             active
                               ? "bg-neon/10"
-                              : "hover:bg-ink-800/50"
+                              : "hover:bg-ink-800/60"
                           }`}
                           onClick={() => setActiveMint(c.mint)}
                         >
-                          <td className="px-3 py-2.5">
+                          <td
+                            className={`relative px-3 py-2.5 ${
+                              active ? "border-l-2 border-l-neon" : "border-l-2 border-l-transparent"
+                            }`}
+                          >
                             <div className="flex items-center gap-2.5">
                               <CoinImage src={c.imageUri ?? null} alt={c.symbol} size={30} />
                               <div className="min-w-0">
                                 <div className="truncate font-medium">{c.name}</div>
-                                <div className="font-mono text-[11px] text-mute-2">{c.symbol}</div>
+                                <div className="font-mono text-[11px] text-mute-2">${c.symbol}</div>
                               </div>
                             </div>
                           </td>
-                          <td className="px-3 py-2.5">
+                          <td className="hidden px-3 py-2.5 lg:table-cell">
                             <div className="flex items-center gap-1.5 font-mono text-xs">
                               <span className="text-mute">{shortenAddress(c.mint, 6, 6)}</span>
                               <CopyButton value={c.mint} label="copy" />
@@ -263,7 +266,7 @@ export function MarketsView() {
                           <td className="px-3 py-2.5 text-right font-mono text-xs">
                             {formatUsd(c.usdMarketCap ?? null)}
                           </td>
-                          <td className="px-3 py-2.5 text-right font-mono text-xs">
+                          <td className="hidden px-3 py-2.5 text-right font-mono text-xs md:table-cell">
                             {c.marketCapSol != null ? compactNumber(c.marketCapSol) : "—"}
                           </td>
                           <td className="px-3 py-2.5">
@@ -277,24 +280,12 @@ export function MarketsView() {
                               </span>
                             )}
                           </td>
-                          <td className="px-3 py-2.5 font-mono text-[11px] text-mute">
+                          <td className="hidden px-3 py-2.5 font-mono text-[11px] text-mute md:table-cell">
                             {c.lastTradeAt
                               ? timeAgo(c.lastTradeAt)
                               : c.createdAt
                                 ? timeAgo(c.createdAt)
                                 : "—"}
-                          </td>
-                          <td className="px-3 py-2.5 text-right">
-                            <button
-                              type="button"
-                              className="press rounded border border-neon/30 bg-neon/10 px-2.5 py-1 font-mono text-[11px] font-semibold text-neon opacity-0 transition-opacity hover:bg-neon/20 group-hover:opacity-100"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveMint(c.mint);
-                              }}
-                            >
-                              Trade
-                            </button>
                           </td>
                         </tr>
                       );
