@@ -3,7 +3,7 @@
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import BN from "bn.js";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { lamportsToSol, pct, shortenAddress, tokensToUi } from "@/lib/format";
 import { MIN_HOLDING_USD_TO_TRADE } from "@/lib/trade-limits";
 import {
@@ -12,9 +12,9 @@ import {
   removePosition,
   updatePositionMeta,
 } from "@/lib/positions";
-import { loadWalletPortfolio, type WalletToken } from "@/lib/portfolio";
+import type { WalletToken } from "@/lib/portfolio";
 import { quoteTrade } from "@/lib/sdk";
-import { getSolUsd, quoteTokenToSol } from "@/lib/token-value";
+import { quoteTokenToSol } from "@/lib/token-value";
 import { fetchJupiterUsdPrice, getKnownTokenMeta } from "@/lib/jupiter";
 import { useWalletData } from "./WalletDataProvider";
 import type { Position } from "@/lib/types";
@@ -48,9 +48,9 @@ export function PositionsView() {
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [holdingsErr, setHoldingsErr] = useState<string | null>(null);
   const [holdingsLoading, setHoldingsLoading] = useState(false);
-  const [solUsd, setSolUsd] = useState<number | null>(null);
   const [tradeMint, setTradeMint] = useState<string | null>(null);
 
+  // Local positions refresh (paper-trade ledger per account). Cheap & per-account.
   const refreshLocal = useCallback(async () => {
     if (!accountId) {
       setRows([]);
@@ -81,131 +81,144 @@ export function PositionsView() {
     setRows(valued);
   }, [connection, publicKey, settings.slippagePct, accountId]);
 
-  const refreshWallet = useCallback(async () => {
+  // Holdings are now driven by WalletDataProvider as the single source of truth.
+  // We just enrich them (metadata fallback + USD/SOL valuation) here. The
+  // enrichment only runs when the holdings list itself actually changes (by
+  // mint+amount+decimals), not on every provider state update. That prevents
+  // the constant reloads that were hammering the public RPC.
+  const sourceHoldings = walletData.holdings;
+  const holdingsKey = useMemo(
+    () =>
+      sourceHoldings
+        .map((h) => `${h.mint}:${h.amount}:${h.decimals}`)
+        .join("|"),
+    [sourceHoldings],
+  );
+
+  // We keep a ref of the most recent enrichment so we don't flash a spinner
+  // and re-quote on every Solana account change notification. Only re-enrich
+  // when the holdings list itself (mints/amounts) actually changes.
+  const lastEnrichKeyRef = useRef<string>("");
+
+  useEffect(() => {
     if (!publicKey) {
       setHoldings([]);
+      setHoldingsLoading(false);
+      setHoldingsErr(null);
+      lastEnrichKeyRef.current = "";
       return;
     }
+    if (sourceHoldings.length === 0) {
+      // Provider hasn't loaded yet — don't blank the UI; just show what we
+      // already have. Don't set loading=true to avoid spinner flash.
+      lastEnrichKeyRef.current = "";
+      return;
+    }
+    if (lastEnrichKeyRef.current === holdingsKey) return;
+    lastEnrichKeyRef.current = holdingsKey;
+
+    let cancelled = false;
     setHoldingsLoading(true);
     setHoldingsErr(null);
-    try {
-      // If the provider already has holdings, reuse them. Otherwise load fresh.
-      const tokens = walletData.holdings.length > 0
-        ? walletData.holdings
-        : await loadWalletPortfolio(connection, publicKey, async (mint) => {
+
+    (async () => {
+      try {
+        // Fall back to the well-known token list (USDC, USDT, BONK, JUP, …)
+        // when the source is "unknown" so the row still gets a name/symbol.
+        const enrichedMeta = sourceHoldings.map((t) => {
+          if (t.source !== "unknown") return t;
+          const known = getKnownTokenMeta(t.mint);
+          if (known) {
+            return {
+              ...t,
+              name: known.name,
+              symbol: known.symbol,
+              source: "lookup" as const,
+            };
+          }
+          return t;
+        });
+
+        const usd = walletData.solUsd;
+        const valued: Holding[] = await Promise.all(
+          enrichedMeta.map(async (t): Promise<Holding> => {
             try {
-              const res = await fetch(`/api/coins/${mint}`, { cache: "no-store" });
-              const j = (await res.json()) as {
-                coin: { name: string; symbol: string; imageUri?: string } | null;
-              };
-              return j.coin
-                ? { name: j.coin.name, symbol: j.coin.symbol, imageUri: j.coin.imageUri }
-                : null;
-            } catch {
-              return null;
+              const q = await quoteTokenToSol({
+                connection,
+                mint: t.mint,
+                tokenAmountRaw: t.amount,
+                user: publicKey,
+                slippagePct: settings.slippagePct,
+                solUsd: usd,
+              });
+              return {
+                ...t,
+                valueLamports: q.solLamports,
+                valueUsd: q.usd,
+                isPumpCoin: q.isPumpCoin,
+                err: q.error,
+              } satisfies Holding;
+            } catch (err) {
+              return {
+                ...t,
+                valueLamports: null,
+                valueUsd: null,
+                isPumpCoin: false,
+                err: err instanceof Error ? err.message : String(err),
+              } satisfies Holding;
             }
-          });
-      // Trigger the provider to refresh so we stay in sync after sells/buys.
-      walletData.refresh();
-      // Show every token the wallet holds, including dust and wrapped SOL
-      // (native SOL is still shown separately at the top of the page for
-      // convenience). The user explicitly asked for a complete list of
-      // everything in the wallet.
-      const eligible = tokens;
-      // Fall back to the well-known token list (USDC, USDT, BONK, JUP, …) when
-      // the pump-fun metadata endpoint returns nothing.
-      const enrichedMeta = eligible.map((t) => {
-        if (t.source !== "unknown") return t;
-        const known = getKnownTokenMeta(t.mint);
-        if (known) {
-          return {
-            ...t,
-            name: known.name,
-            symbol: known.symbol,
-            source: "lookup" as const,
-          };
+          }),
+        );
+
+        // Top up USD for any holding that came back null.
+        const needUsd = valued
+          .filter((h) => h.valueUsd == null && !h.err)
+          .map((h) => h.mint);
+        if (needUsd.length > 0) {
+          const prices = await fetchJupiterUsdPrice(needUsd);
+          if (!cancelled) {
+            for (const h of valued) {
+              if (h.valueUsd != null) continue;
+              const p = prices[h.mint];
+              if (p != null && Number.isFinite(p) && Number.isFinite(h.uiAmount)) {
+                h.valueUsd = p * h.uiAmount;
+              }
+            }
+          }
         }
-        return t;
-      });
-      const usd = solUsd ?? (await getSolUsd());
-      const valued = await Promise.all(
-        enrichedMeta.map(async (t): Promise<Holding> => {
-          try {
-            const q = await quoteTokenToSol({
-              connection,
-              mint: t.mint,
-              tokenAmountRaw: t.amount,
-              user: publicKey,
-              slippagePct: settings.slippagePct,
-              solUsd: usd,
-            });
-            return {
-              ...t,
-              valueLamports: q.solLamports,
-              valueUsd: q.usd,
-              isPumpCoin: q.isPumpCoin,
-              err: q.error,
-            } satisfies Holding;
-          } catch (err) {
-            return {
-              ...t,
-              valueLamports: null,
-              valueUsd: null,
-              isPumpCoin: false,
-              err: err instanceof Error ? err.message : String(err),
-            } satisfies Holding;
-          }
-        }),
-      );
-      // also fetch a USD price for any holding that came back with USD=null
-      const needUsd = valued
-        .filter((h) => h.valueUsd == null && !h.err)
-        .map((h) => h.mint);
-      if (needUsd.length > 0) {
-        const prices = await fetchJupiterUsdPrice(needUsd);
-        for (const h of valued) {
-          if (h.valueUsd != null) continue;
-          const p = prices[h.mint];
-          if (p != null && Number.isFinite(p) && Number.isFinite(h.uiAmount)) {
-            h.valueUsd = p * h.uiAmount;
-          }
+
+        if (!cancelled) {
+          setHoldings(valued);
+          setHoldingsLoading(false);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setHoldingsErr(err instanceof Error ? err.message : String(err));
+          setHoldingsLoading(false);
         }
       }
-      setHoldings(valued);
-    } catch (err) {
-      setHoldingsErr(err instanceof Error ? err.message : String(err));
-    } finally {
-      setHoldingsLoading(false);
-    }
-  }, [connection, publicKey, settings.slippagePct, solUsd, walletData]);
+    })();
 
-  useEffect(() => {
-    void refreshLocal();
-    const id = setInterval(() => void refreshLocal(), 15_000);
-    return () => clearInterval(id);
-  }, [refreshLocal]);
-
-  useEffect(() => {
-    if (!publicKey) {
-      setHoldings([]);
-      return;
-    }
-    void refreshWallet();
-    const id = setInterval(() => void refreshWallet(), 20_000);
-    return () => clearInterval(id);
-  }, [publicKey, refreshWallet]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void getSolUsd().then((v) => {
-      if (!cancelled) setSolUsd(v);
-    });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [
+    publicKey,
+    holdingsKey,
+    sourceHoldings,
+    connection,
+    settings.slippagePct,
+    walletData.solUsd,
+  ]);
+
+  useEffect(() => {
+    void refreshLocal();
+    const id = setInterval(() => void refreshLocal(), 30_000);
+    return () => clearInterval(id);
+  }, [refreshLocal]);
 
   const sol = walletData.sol;
+  const solUsd = walletData.solUsd;
   const solErr = walletData.error;
 
   const totalSol = sol ?? 0;
@@ -285,7 +298,12 @@ export function PositionsView() {
               </span>
               <button
                 type="button"
-                onClick={() => void refreshWallet()}
+                onClick={() => {
+                  // Force a re-enrich by clearing the lastEnrichKeyRef then
+                  // toggling sourceHoldings via the provider's refresh.
+                  lastEnrichKeyRef.current = "";
+                  walletData.refresh();
+                }}
                 className="press rounded border border-line bg-ink-800 px-2 py-0.5 font-mono text-[11px] text-mute hover:border-neon hover:text-neon"
               >
                 refresh
