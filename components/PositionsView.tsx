@@ -219,42 +219,65 @@ export function PositionsView() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="font-mono text-lg tracking-wide">Positions</h1>
-        <p className="text-xs text-mute">
+        <h1 className="text-xl font-semibold sm:text-2xl">
+          <span className="text-gradient">Positions</span>
+        </h1>
+        <p className="text-xs text-mute sm:text-sm">
           Your on-wallet SPL holdings and the tokens this account has traded. Other accounts on this
           device are isolated.
         </p>
       </div>
-      <div className="rounded border border-line bg-ink-800 p-3 font-mono text-sm">
-        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-          <span>
-            Wallet SOL:{" "}
-            {solErr ? <span className="text-danger">{solErr}</span> : sol == null ? "—" : `${sol.toFixed(4)} SOL`}
-            {solUsd != null && sol != null ? (
-              <span className="ml-1 text-mute">≈ ${(sol * solUsd).toFixed(2)}</span>
+      <div className="relative overflow-hidden rounded-xl border border-line glass">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -top-12 -right-12 h-32 w-32 rounded-full bg-neon/15 blur-3xl"
+        />
+        <div className="relative p-3 font-mono text-sm sm:p-4">
+          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+            <span>
+              <span className="text-[10px] uppercase tracking-widest text-mute">Wallet SOL</span>{" "}
+              {solErr ? (
+                <span className="text-danger">{solErr}</span>
+              ) : sol == null ? (
+                "—"
+              ) : (
+                <span className="text-neon">{sol.toFixed(4)}</span>
+              )}{" "}
+              {sol == null ? null : <span className="text-mute">SOL</span>}
+              {solUsd != null && sol != null ? (
+                <span className="ml-1 text-mute">
+                  ≈ <span className="text-info">${(sol * solUsd).toFixed(2)}</span>
+                </span>
+              ) : null}
+            </span>
+            {connected ? (
+              <span className="text-mute">
+                {publicKey ? shortenAddress(publicKey.toBase58(), 6, 6) : "—"}
+              </span>
             ) : null}
-          </span>
-          {connected ? (
-            <span className="text-mute">{publicKey ? shortenAddress(publicKey.toBase58(), 6, 6) : "—"}</span>
+          </div>
+          {connected && (holdings.length > 0 || totalSol > 0) && solUsd != null ? (
+            <p className="mt-1 text-[11px] text-mute">
+              Total ≈{" "}
+              <span className="text-white">{totalSol.toFixed(4)}</span> +{" "}
+              <span className="text-white">{totalHoldingsSol.toFixed(4)}</span> holdings ={" "}
+              <span className="text-neon">{(totalSol + totalHoldingsSol).toFixed(4)}</span> SOL ·{" "}
+              <span className="text-info">${totalUsd.toFixed(2)}</span>
+            </p>
           ) : null}
         </div>
-        {connected && (holdings.length > 0 || totalSol > 0) && solUsd != null ? (
-          <p className="mt-1 text-[11px] text-mute">
-            Total ≈ {totalSol.toFixed(4)} + {totalHoldingsSol.toFixed(4)} holdings = {(totalSol + totalHoldingsSol).toFixed(4)} SOL · ${totalUsd.toFixed(2)}
-          </p>
-        ) : null}
       </div>
 
       {!connected ? (
-        <div className="rounded border border-line bg-ink-800 p-8 text-center text-sm text-mute">
+        <div className="rounded-xl border border-dashed border-line bg-ink-850 p-8 text-center text-sm text-mute">
           Connect your wallet to load your positions and on-wallet holdings.
         </div>
       ) : (
       <>
-        <section className="rounded border border-line bg-ink-800">
-          <header className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-3 py-2">
-            <h2 className="font-mono text-xs uppercase tracking-wide text-mute">
-              Wallet holdings {holdingsLoading ? "· loading?" : `· ${holdings.length}`}
+        <section className="overflow-hidden rounded-xl border border-line bg-ink-900">
+          <header className="flex flex-wrap items-center justify-between gap-2 border-b border-line-soft bg-ink-850/80 px-3 py-2 backdrop-blur">
+            <h2 className="font-mono text-xs uppercase tracking-widest text-mute">
+              Wallet holdings {holdingsLoading ? "· loading…" : `· ${holdings.length}`}
             </h2>
             <div className="flex items-center gap-2">
               <span className="font-mono text-[11px] text-mute">
@@ -263,7 +286,7 @@ export function PositionsView() {
               <button
                 type="button"
                 onClick={() => void refreshWallet()}
-                className="font-mono text-[11px] text-mute hover:text-neon"
+                className="press rounded border border-line bg-ink-800 px-2 py-0.5 font-mono text-[11px] text-mute hover:border-neon hover:text-neon"
               >
                 refresh
               </button>
@@ -310,7 +333,7 @@ export function PositionsView() {
               </p>
             </div>
           ) : (
-            <ul className="divide-y divide-line">
+            <ul className="divide-y divide-line-soft">
               {holdings.map((h) => (
                 <HoldingRow
                   key={h.mint}
@@ -321,7 +344,7 @@ export function PositionsView() {
               ))}
             </ul>
           )}
-          <p className="border-t border-line/60 px-3 py-2 text-[11px] text-mute">
+          <p className="border-t border-line-soft/60 bg-ink-850/60 px-3 py-2 text-[11px] text-mute">
             Tap a token to trade. Pump.fun bonding-curve / pump-amm coins use the pump program.
             Everything else (USDC, BONK, JUP, memecoins, etc.) routes through Jupiter so you can
             buy or sell using any token in your wallet that has enough balance. The app requires
@@ -330,37 +353,39 @@ export function PositionsView() {
         </section>
 
           {tradeMint ? (
-            <section className="rounded border border-line bg-ink-800 p-3">
-              <header className="mb-2 flex items-center justify-between">
-                <h2 className="font-mono text-xs uppercase tracking-wide text-mute">
+            <section className="overflow-hidden rounded-xl border border-line bg-ink-900">
+              <header className="mb-2 flex items-center justify-between border-b border-line-soft bg-ink-850/80 px-3 py-2 backdrop-blur">
+                <h2 className="font-mono text-xs uppercase tracking-widest text-mute">
                   Trade · {shortenAddress(tradeMint, 6, 6)}
                 </h2>
                 <button
                   type="button"
                   onClick={() => setTradeMint(null)}
-                  className="font-mono text-[11px] text-mute hover:text-danger"
+                  className="press rounded border border-line bg-ink-800 px-2 py-0.5 font-mono text-[11px] text-mute hover:border-danger hover:text-danger"
                 >
                   close
                 </button>
               </header>
-              <QuickTradePanel
-                mint={tradeMint}
-                name={holdings.find((h) => h.mint === tradeMint)?.name}
-                symbol={holdings.find((h) => h.mint === tradeMint)?.symbol}
-                imageUri={holdings.find((h) => h.mint === tradeMint)?.imageUri}
-                initialSide="sell"
-                onClose={() => setTradeMint(null)}
-                holdings={holdings}
-              />
+              <div className="p-3">
+                <QuickTradePanel
+                  mint={tradeMint}
+                  name={holdings.find((h) => h.mint === tradeMint)?.name}
+                  symbol={holdings.find((h) => h.mint === tradeMint)?.symbol}
+                  imageUri={holdings.find((h) => h.mint === tradeMint)?.imageUri}
+                  initialSide="sell"
+                  onClose={() => setTradeMint(null)}
+                  holdings={holdings}
+                />
+              </div>
             </section>
           ) : null}
 
           <section>
-            <h2 className="mb-2 font-mono text-xs uppercase tracking-wide text-mute">
-              Local positions (this account) · {rows.length}
+            <h2 className="mb-2 font-mono text-xs uppercase tracking-widest text-mute">
+              Local positions (this account) · <span className="text-neon">{rows.length}</span>
             </h2>
             {rows.length === 0 ? (
-              <div className="rounded border border-line bg-ink-800 p-8 text-center text-sm text-mute">
+              <div className="rounded-xl border border-dashed border-line bg-ink-850 p-8 text-center text-sm text-mute">
                 No positions yet. Paper-trade a coin to see it here.
               </div>
             ) : (
@@ -384,31 +409,33 @@ export function PositionsView() {
                   ))}
                 </div>
                 {/* Desktop table */}
-                <div className="hidden overflow-x-auto rounded border border-line sm:block">
-                  <table className="w-full min-w-[980px] text-left text-sm">
-                    <thead className="bg-ink-800 font-mono text-[11px] uppercase text-mute">
-                      <tr>
-                        <th className="px-3 py-2">Coin</th>
-                        <th className="px-3 py-2">Amount</th>
-                        <th className="px-3 py-2">Cost</th>
-                        <th className="px-3 py-2">Value</th>
-                        <th className="px-3 py-2">PnL</th>
-                        <th className="px-3 py-2">TP %</th>
-                        <th className="px-3 py-2">SL %</th>
-                        <th className="px-3 py-2"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map((r) => (
-                        <PositionRow
-                          key={r.mint}
-                          position={r}
-                          onUpdate={() => void refreshLocal()}
-                          accountId={accountId}
-                        />
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="hidden overflow-hidden rounded-xl border border-line sm:block">
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[980px] text-left text-sm">
+                      <thead className="bg-ink-850/80 font-mono text-[11px] uppercase tracking-widest text-mute backdrop-blur">
+                        <tr>
+                          <th className="px-3 py-2">Coin</th>
+                          <th className="px-3 py-2">Amount</th>
+                          <th className="px-3 py-2">Cost</th>
+                          <th className="px-3 py-2">Value</th>
+                          <th className="px-3 py-2">PnL</th>
+                          <th className="px-3 py-2">TP %</th>
+                          <th className="px-3 py-2">SL %</th>
+                          <th className="px-3 py-2"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((r) => (
+                          <PositionRow
+                            key={r.mint}
+                            position={r}
+                            onUpdate={() => void refreshLocal()}
+                            accountId={accountId}
+                          />
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </>
             )}
@@ -436,14 +463,14 @@ function HoldingRow({
       ? Number(lamportsToSol(value)) * solUsd
       : null;
   return (
-    <li className="flex flex-wrap items-center gap-2 px-3 py-2 sm:flex-nowrap sm:gap-3">
-      <CoinImage src={holding.imageUri ?? null} alt={holding.symbol} size={32} />
+    <li className="group flex flex-wrap items-center gap-2 px-3 py-2.5 transition-colors hover:bg-ink-850/60 sm:flex-nowrap sm:gap-3">
+      <CoinImage src={holding.imageUri ?? null} alt={holding.symbol} size={32} className="shadow-neon-sm" />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-2">
           <Link href={`/coin/${holding.mint}`} className="truncate font-medium hover:text-neon">
             {holding.name}
           </Link>
-          <span className="font-mono text-xs text-mute">{holding.symbol}</span>
+          <span className="font-mono text-xs text-mute">${holding.symbol}</span>
           <span className="font-mono text-[11px] text-mute">
             {tokensToUi(new BN(Math.round(holding.amount)), holding.decimals)} {holding.symbol}
           </span>
@@ -452,24 +479,25 @@ function HoldingRow({
           {shortenAddress(holding.mint, 6, 6)}
           <CopyButton value={holding.mint} label="copy" />
           {holding.source === "unknown" ? (
-            <span className="rounded bg-warn/10 px-1 py-0.5 text-[10px] text-warn">no meta</span>
+            <span className="rounded border border-warn/30 bg-warn/5 px-1 py-0.5 text-[10px] text-warn">no meta</span>
           ) : null}
           {holding.isPumpCoin ? (
-            <span className="rounded bg-neon/10 px-1 py-0.5 text-[10px] text-neon">pump</span>
+            <span className="rounded border border-neon/30 bg-neon/5 px-1 py-0.5 text-[10px] text-neon">pump</span>
           ) : (
-            <span className="rounded bg-ink-700 px-1 py-0.5 text-[10px] text-mute">jupiter</span>
+            <span className="rounded border border-line bg-ink-800 px-1 py-0.5 text-[10px] text-mute">jupiter</span>
           )}
         </div>
       </div>
       <div className="text-right font-mono text-xs">
         {value ? (
           <p>
-            {lamportsToSol(value)} SOL
-            {usd != null ? <span className="block text-[11px] text-mute">≈ ${usd.toFixed(2)}</span> : null}
+            <span className="text-white">{lamportsToSol(value)}</span>{" "}
+            <span className="text-mute">SOL</span>
+            {usd != null ? <span className="block text-[11px] text-info">≈ ${usd.toFixed(2)}</span> : null}
           </p>
         ) : usd != null ? (
           <p>
-            ${usd.toFixed(2)}
+            <span className="text-white">${usd.toFixed(2)}</span>
             <span className="block text-[11px] text-mute">price feed</span>
           </p>
         ) : holding.err ? (
@@ -489,7 +517,7 @@ function HoldingRow({
             ? `Below $${MIN_HOLDING_USD_TO_TRADE.toFixed(2)} minimum — top up or sell to recoup fees first.`
             : undefined
         }
-        className="shrink-0 rounded border border-line px-2 py-1 font-mono text-[11px] text-mute hover:border-neon hover:text-neon disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line disabled:hover:text-mute"
+        className="press shrink-0 rounded-md border border-line bg-ink-850 px-3 py-1.5 font-mono text-[11px] text-mute opacity-0 transition-colors group-hover:border-neon group-hover:text-neon group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line disabled:hover:text-mute sm:opacity-100"
       >
         Trade
       </button>

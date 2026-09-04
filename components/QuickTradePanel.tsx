@@ -738,9 +738,14 @@ export function QuickTradePanel(props: Props) {
         : "pump.fun bonding curve";
 
   return (
-    <div className="rounded border border-line bg-ink-800 p-4">
+    <div className="relative overflow-hidden rounded-xl border border-line glass">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-16 -right-16 h-36 w-36 rounded-full bg-neon/10 blur-3xl"
+      />
+      <div className="relative p-4">
       {!wallet.connected ? (
-        <div className="mb-3 rounded border border-warn/40 bg-warn/10 p-2 text-xs text-warn">
+        <div className="mb-3 rounded-md border border-warn/40 bg-warn/5 p-2.5 text-xs text-warn">
           <p className="font-mono font-semibold">Wallet not connected</p>
           <p className="mt-1 text-mute">
             You can still see live quotes. To execute a trade, connect Phantom (or another
@@ -750,15 +755,15 @@ export function QuickTradePanel(props: Props) {
       ) : null}
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <CoinImage src={props.imageUri ?? null} alt={symbol} size={28} />
+          <CoinImage src={props.imageUri ?? null} alt={symbol} size={32} className="shadow-neon-sm" />
           <div className="min-w-0">
-            <p className="truncate font-mono text-sm">{props.name ?? symbol}</p>
-            <p className="font-mono text-[11px] text-mute">{symbol}</p>
+            <p className="truncate font-mono text-sm font-semibold">{props.name ?? symbol}</p>
+            <p className="font-mono text-[11px] text-mute">${symbol}</p>
           </div>
         </div>
         <div className="text-right">
           {solPrice ? (
-            <p className="font-mono text-[11px] text-mute">SOL ≈ ${solPrice.toFixed(2)}</p>
+            <p className="font-mono text-[11px] text-mute">SOL ≈ <span className="text-info">${solPrice.toFixed(2)}</span></p>
           ) : (
             <p className="font-mono text-[11px] text-mute">SOL price …</p>
           )}
@@ -784,8 +789,10 @@ export function QuickTradePanel(props: Props) {
             setErrorInfo(null);
             setReceipt(null);
           }}
-          className={`press flex-1 rounded py-2 font-mono text-sm uppercase focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon ${
-            side === "buy" ? "bg-neon text-ink-950" : "bg-ink-700 text-mute hover:text-white"
+          className={`press relative flex-1 overflow-hidden rounded-md py-2.5 font-mono text-sm font-semibold uppercase focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon ${
+            side === "buy"
+              ? "border border-neon/50 bg-gradient-to-r from-neon to-emerald-400 text-ink-950 shadow-[0_0_18px_-4px_rgba(57,255,136,0.6)]"
+              : "border border-line bg-ink-850 text-mute hover:border-neon/40 hover:text-white"
           }`}
         >
           Buy {symbol}
@@ -799,16 +806,18 @@ export function QuickTradePanel(props: Props) {
             setErrorInfo(null);
             setReceipt(null);
           }}
-          className={`press flex-1 rounded py-2 font-mono text-sm uppercase focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger ${
-            side === "sell" ? "bg-danger text-white" : "bg-ink-700 text-mute hover:text-white"
+          className={`press relative flex-1 overflow-hidden rounded-md py-2.5 font-mono text-sm font-semibold uppercase focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger ${
+            side === "sell"
+              ? "border border-danger/50 bg-gradient-to-r from-danger to-rose-400 text-white shadow-[0_0_18px_-4px_rgba(255,71,87,0.5)]"
+              : "border border-line bg-ink-850 text-mute hover:border-danger/40 hover:text-white"
           }`}
         >
           Sell {symbol}
         </button>
       </div>
 
-      <label className="mb-1 block font-mono text-[11px] uppercase text-mute">
-        {side === "buy" ? "Spend" : `Sell amount (${symbol})`}
+      <label className="mb-1 block font-mono text-[10px] uppercase tracking-widest text-mute">
+        {side === "buy" ? "Spend (SOL)" : `Sell amount (${symbol})`}
       </label>
       <div className="mb-1 flex gap-2">
         <input
@@ -820,7 +829,7 @@ export function QuickTradePanel(props: Props) {
           }}
           inputMode="decimal"
           placeholder={side === "buy" ? "0.0" : "amount of token"}
-          className="min-w-0 flex-1 rounded border border-line bg-ink-900 px-3 py-2 font-mono text-base outline-none focus:border-neon sm:text-sm"
+          className="min-w-0 flex-1 rounded-md border border-line bg-ink-850 px-3 py-2.5 font-mono text-base outline-none focus:border-neon focus:bg-ink-900 sm:text-sm"
         />
       </div>
       {side === "buy" ? (
@@ -834,7 +843,11 @@ export function QuickTradePanel(props: Props) {
                 setQuote(null);
                 setErrorInfo(null);
               }}
-              className="press rounded border border-line px-2 py-1 font-mono text-[11px] text-mute hover:border-neon hover:text-neon focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon"
+              className={`press rounded-md border px-2 py-1 font-mono text-[11px] hover:border-neon hover:text-neon focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon ${
+                amount === preset
+                  ? "border-neon/50 bg-neon/10 text-neon"
+                  : "border-line bg-ink-850 text-mute"
+              }`}
             >
               {preset}
             </button>
@@ -849,7 +862,7 @@ export function QuickTradePanel(props: Props) {
                 setQuote(null);
                 setErrorInfo(null);
               }}
-              className="press ml-auto rounded border border-line px-2 py-1 font-mono text-[11px] text-mute hover:border-neon hover:text-neon focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon"
+              className="press ml-auto rounded-md border border-warn/40 bg-warn/10 px-2 py-1 font-mono text-[11px] text-warn hover:border-warn hover:bg-warn/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warn"
               title="Use entire balance minus fees"
             >
               MAX
@@ -858,14 +871,16 @@ export function QuickTradePanel(props: Props) {
         </div>
       ) : null}
       {amountUsd != null ? (
-        <p className="mb-2 font-mono text-[11px] text-mute">≈ ${amountUsd.toFixed(2)} USD</p>
+        <p className="mb-2 font-mono text-[11px] text-mute">
+          ≈ <span className="text-info">${amountUsd.toFixed(2)}</span> USD
+        </p>
       ) : (
         <div className="mb-2" />
       )}
 
       {side === "buy" ? (
         <label className="mb-3 block">
-          <span className="mb-1 block font-mono text-[11px] uppercase text-mute">
+          <span className="mb-1 block font-mono text-[10px] uppercase tracking-widest text-mute">
             Pay with
           </span>
           <select
@@ -878,7 +893,7 @@ export function QuickTradePanel(props: Props) {
                 setPumpSupported(false);
               }
             }}
-            className="w-full rounded border border-line bg-ink-900 px-3 py-2 font-mono text-sm"
+            className="w-full rounded-md border border-line bg-ink-850 px-3 py-2 font-mono text-sm focus:border-neon focus:outline-none"
           >
             {inputOptions.map((o) => (
               <option key={o.mint} value={o.mint}>
@@ -895,11 +910,11 @@ export function QuickTradePanel(props: Props) {
             </p>
           ) : null}
           {inMint !== SOL_MINT ? (
-            <p className="mt-1 font-mono text-[11px] text-warn">
+            <p className="mt-1 rounded-md border border-warn/30 bg-warn/5 px-2 py-1 font-mono text-[11px] text-warn">
               Will route through Jupiter. The pump program only accepts SOL.
             </p>
           ) : pumpSupported === false ? (
-            <p className="mt-1 font-mono text-[11px] text-warn">
+            <p className="mt-1 rounded-md border border-warn/30 bg-warn/5 px-2 py-1 font-mono text-[11px] text-warn">
               This token is not on pump.fun. Buy will route through Jupiter.
             </p>
           ) : null}
@@ -911,7 +926,7 @@ export function QuickTradePanel(props: Props) {
           type="button"
           onClick={() => void runQuote()}
           disabled={busy || !isValidAmount}
-          className="press flex-1 rounded border border-line py-2 font-mono text-xs hover:border-neon focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon disabled:opacity-40"
+          className="press flex-1 rounded-md border border-line bg-ink-850 py-2.5 font-mono text-xs hover:border-neon hover:text-neon focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon disabled:opacity-40"
         >
           {busy ? "Quoting…" : "Get quote"}
         </button>
@@ -919,10 +934,10 @@ export function QuickTradePanel(props: Props) {
           type="button"
           onClick={() => setConfirmOpen(true)}
           disabled={busy || !quote}
-          className={`press flex-1 rounded py-2 font-mono text-xs text-white focus-visible:outline-none focus-visible:ring-2 disabled:opacity-40 ${
+          className={`press relative flex-1 overflow-hidden rounded-md py-2.5 font-mono text-xs font-semibold text-white focus-visible:outline-none focus-visible:ring-2 disabled:opacity-40 ${
             side === "buy"
-              ? "bg-neon text-ink-950 focus-visible:ring-neon"
-              : "bg-danger focus-visible:ring-danger"
+              ? "border border-neon/50 bg-gradient-to-r from-neon to-emerald-400 text-ink-950 focus-visible:ring-neon"
+              : "border border-danger/50 bg-gradient-to-r from-danger to-rose-400 focus-visible:ring-danger"
           }`}
         >
           {settings.simulateMode ? "Paper fill" : `Confirm ${side === "buy" ? "buy" : "sell"}`}
@@ -930,36 +945,36 @@ export function QuickTradePanel(props: Props) {
       </div>
 
       {quote ? (
-        <dl className="grid grid-cols-2 gap-x-3 gap-y-1 rounded border border-line bg-ink-900 p-2 font-mono text-xs">
+        <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-md border border-line bg-ink-850 p-2.5 font-mono text-xs">
           <dt className="text-mute">You receive</dt>
-          <dd>
+          <dd className="text-right text-white">
             {side === "buy"
               ? `${tokensToUi(new BN(quote.outAmountRaw), quote.outDecimals)} ${quote.outSymbol}`
               : `${lamportsToSol(new BN(quote.outAmountRaw))} SOL`}
             {quote.usdValue != null ? (
-              <span className="block text-[11px] text-mute">≈ ${quote.usdValue.toFixed(2)}</span>
+              <span className="block text-[10px] text-info">≈ ${quote.usdValue.toFixed(2)}</span>
             ) : null}
           </dd>
           <dt className="text-mute">Venue</dt>
-          <dd>
+          <dd className="text-right text-white">
             {venueLabel}
             {quote.graduated ? " · graduated" : ""}
           </dd>
           <dt className="text-mute">Pay with</dt>
-          <dd>
+          <dd className="text-right text-white">
             {quote.inSymbol} · {shortenAddress(quote.inMint, 4, 4)}
           </dd>
           <dt className="text-mute">Impact</dt>
-          <dd>
+          <dd className="text-right text-white">
             {quote.priceImpactPct == null
               ? "—"
               : `${quote.priceImpactPct.toFixed(2)}%`}
           </dd>
           <dt className="text-mute">Slippage</dt>
-          <dd>{settings.slippagePct}%</dd>
+          <dd className="text-right text-white">{settings.slippagePct}%</dd>
         </dl>
       ) : (
-        <p className="rounded border border-dashed border-line bg-ink-900 p-3 text-center font-mono text-xs text-mute">
+        <p className="rounded-md border border-dashed border-line bg-ink-850 p-3 text-center font-mono text-xs text-mute">
           {side === "buy"
             ? inMint === SOL_MINT && pumpSupported !== false
               ? `Pick how much SOL to spend. Min $${MIN_TRADE_USD.toFixed(2)} USD (~${solPrice ? (MIN_TRADE_USD / solPrice).toFixed(4) : "0.0001"} SOL).`
@@ -969,7 +984,7 @@ export function QuickTradePanel(props: Props) {
       )}
 
       {receipt ? (
-        <div className="mt-3 space-y-1 rounded border border-neon/40 bg-neon/5 p-2 text-xs text-neon">
+        <div className="mt-3 space-y-1 rounded-md border border-neon/40 bg-neon/5 p-2.5 text-xs text-neon">
           <p className="font-mono">{receipt.note}</p>
           {receipt.url ? (
             <a
@@ -985,7 +1000,7 @@ export function QuickTradePanel(props: Props) {
       ) : null}
 
       {errorInfo ? (
-        <div className="mt-3 rounded border border-danger/40 bg-danger/5 p-3 text-xs">
+        <div className="mt-3 rounded-md border border-danger/40 bg-danger/5 p-3 text-xs">
           <p className="font-mono font-semibold text-danger">{errorInfo.title}</p>
           <p className="mt-1 font-mono text-mute">{errorInfo.detail}</p>
           {errorInfo.fixes.length > 0 ? (
@@ -1041,6 +1056,7 @@ export function QuickTradePanel(props: Props) {
           </div>
         }
       />
+      </div>
     </div>
   );
 }
