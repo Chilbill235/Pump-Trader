@@ -7,7 +7,13 @@ import { detectFromAdapters, type DetectedWallet, type WalletId } from "@/lib/wa
 
 type Status = "idle" | "connecting" | "opening-app" | "error";
 
-export function ConnectWalletButton({ className }: { className?: string }) {
+export function ConnectWalletButton({
+  className,
+  variant = "default",
+}: {
+  className?: string;
+  variant?: "default" | "wide";
+}) {
   const { publicKey, connected, connecting, disconnect, wallet, wallets, select } = useWallet();
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<Status>("idle");
@@ -187,6 +193,8 @@ export function ConnectWalletButton({ className }: { className?: string }) {
         aria-expanded={open}
         aria-label={connected ? `Wallet ${label}` : "Connect wallet"}
         className={`press relative flex h-9 items-center gap-2 overflow-hidden rounded-md border px-3 font-mono text-xs font-semibold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-neon ${
+          variant === "wide" ? "w-full justify-center" : ""
+        } ${
           connected
             ? "border-neon/60 bg-gradient-to-r from-neon/15 to-neon/5 text-neon hover:from-neon/25 hover:to-neon/10"
             : status === "error"

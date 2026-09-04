@@ -5,14 +5,21 @@
 :root {
   color-scheme: dark;
   --neon: #39ff88;
+  --neon-soft: rgba(57, 255, 136, 0.12);
+  --neon-glow: rgba(57, 255, 136, 0.45);
   --warn: #f59e0b;
   --danger: #ef4444;
+  --info: #38bdf8;
   --ink-950: #05060a;
   --ink-900: #0d1017;
+  --ink-850: #10141e;
   --ink-800: #141824;
   --ink-700: #1c2230;
+  --ink-600: #242a38;
   --line: #242a38;
+  --line-soft: #1a1f2c;
   --mute: #8a93a6;
+  --mute-2: #6b7384;
 }
 
 html,
@@ -32,6 +39,11 @@ body {
   overscroll-behavior-y: contain;
   padding-top: env(safe-area-inset-top);
   padding-bottom: env(safe-area-inset-bottom);
+  background-image:
+    radial-gradient(circle at 12% -8%, rgba(57, 255, 136, 0.05), transparent 35%),
+    radial-gradient(circle at 88% 4%, rgba(14, 165, 233, 0.04), transparent 40%),
+    radial-gradient(circle at 50% 110%, rgba(168, 85, 247, 0.03), transparent 50%);
+  background-attachment: fixed;
 }
 
 /* Tighter buttons / inputs on mobile so they fit the screen. */
@@ -42,7 +54,7 @@ body {
   input[type="search"],
   select,
   textarea {
-    font-size: 16px; /* prevents iOS Safari zoom-on-focus */
+    font-size: 16px;
   }
   button {
     touch-action: manipulation;
@@ -88,8 +100,24 @@ input[type="number"] {
 /* Subtle radial backdrop for the top of every page. */
 .app-backdrop {
   background-image:
-    radial-gradient(circle at 20% -10%, rgba(57, 255, 136, 0.06), transparent 40%),
-    radial-gradient(circle at 100% 0%, rgba(14, 165, 233, 0.05), transparent 40%);
+    radial-gradient(circle at 20% -10%, rgba(57, 255, 136, 0.08), transparent 40%),
+    radial-gradient(circle at 100% 0%, rgba(14, 165, 233, 0.06), transparent 40%);
+}
+
+.app-backdrop-strong {
+  background-image:
+    radial-gradient(circle at 20% -10%, rgba(57, 255, 136, 0.16), transparent 40%),
+    radial-gradient(circle at 100% 0%, rgba(14, 165, 233, 0.10), transparent 40%),
+    radial-gradient(circle at 50% 50%, rgba(168, 85, 247, 0.05), transparent 60%);
+}
+
+/* Grid pattern overlay (optional) */
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(57, 255, 136, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(57, 255, 136, 0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+  background-position: -1px -1px;
 }
 
 /* Live pulse used everywhere. */
@@ -116,6 +144,44 @@ input[type="number"] {
   pointer-events: none;
 }
 
+/* Marquee for the bot-running strip. */
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.marquee {
+  animation: marquee 28s linear infinite;
+}
+
+/* Soft glow that gently breathes. */
+@keyframes breathe {
+  0%, 100% { box-shadow: 0 0 14px 0 rgba(57, 255, 136, 0.35); }
+  50% { box-shadow: 0 0 28px 2px rgba(57, 255, 136, 0.55); }
+}
+.glow-neon {
+  animation: breathe 2.8s ease-in-out infinite;
+}
+
+/* Gradient text for hero numbers / brand. */
+.text-gradient {
+  background: linear-gradient(135deg, #39ff88 0%, #0ea5e9 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.text-gradient-warm {
+  background: linear-gradient(135deg, #f59e0b 0%, #ec4899 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.text-gradient-cool {
+  background: linear-gradient(135deg, #0ea5e9 0%, #a855f7 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
 /* Reusable utilities. */
 @layer utilities {
   .safe-top {
@@ -129,7 +195,7 @@ input[type="number"] {
     min-width: 44px;
   }
   .press {
-    transition: transform 80ms ease, background-color 80ms ease, border-color 80ms ease, color 80ms ease, box-shadow 80ms ease;
+    transition: transform 80ms ease, background-color 80ms ease, border-color 80ms ease, color 80ms ease, box-shadow 80ms ease, opacity 80ms ease;
   }
   .press:active {
     transform: scale(0.97);
@@ -137,8 +203,51 @@ input[type="number"] {
   .text-shadow-neon {
     text-shadow: 0 0 12px rgba(57, 255, 136, 0.6);
   }
+  .text-shadow-soft {
+    text-shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
+  }
   .scroll-hide::-webkit-scrollbar { display: none; }
   .scroll-hide { scrollbar-width: none; }
+  .glass {
+    background: linear-gradient(180deg, rgba(20, 25, 37, 0.85) 0%, rgba(10, 13, 20, 0.85) 100%);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+  }
+  .glass-strong {
+    background: linear-gradient(180deg, rgba(28, 34, 48, 0.95) 0%, rgba(13, 16, 23, 0.95) 100%);
+    backdrop-filter: blur(24px) saturate(150%);
+    -webkit-backdrop-filter: blur(24px) saturate(150%);
+  }
+  .ring-soft {
+    box-shadow: 0 0 0 1px rgba(57, 255, 136, 0.18), 0 6px 24px -6px rgba(57, 255, 136, 0.18);
+  }
+  .ring-soft-warn {
+    box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.18), 0 6px 24px -6px rgba(245, 158, 11, 0.18);
+  }
+  .ring-soft-danger {
+    box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.18), 0 6px 24px -6px rgba(239, 68, 68, 0.18);
+  }
+  .divider-y {
+    background: linear-gradient(180deg, transparent 0%, var(--line) 50%, transparent 100%);
+  }
+  .border-gradient {
+    position: relative;
+  }
+  .border-gradient::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, rgba(57, 255, 136, 0.6), rgba(14, 165, 233, 0.3));
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+  .border-gradient-warm::before {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.5), rgba(236, 72, 153, 0.3));
+  }
 }
 
 /* Accessible focus rings on keyboard navigation. */
@@ -160,7 +269,6 @@ input[type="number"] {
     outline: 2px solid #39ff88;
     outline-offset: 2px;
   }
-  /* Checkboxes: keep native ring when checked. */
   input[type="checkbox"]:focus-visible,
   input[type="radio"]:focus-visible {
     box-shadow: 0 0 0 2px #39ff88;
@@ -176,7 +284,7 @@ input[type="number"] {
   background: linear-gradient(90deg, #1c2230 0%, #2a3142 50%, #1c2230 100%);
   background-size: 200% 100%;
   animation: shimmer 1.4s linear infinite;
-  border-radius: 4px;
+  border-radius: 6px;
 }
 
 /* PWA standalone adjustments. */
@@ -190,4 +298,52 @@ input[type="number"] {
     position: fixed;
     width: 100%;
   }
+}
+
+/* Slide-in panel (notifications). */
+@keyframes slide-in-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+.slide-in-right {
+  animation: slide-in-right 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.fade-in {
+  animation: fade-in 0.18s ease-out;
+}
+
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(0.96) translateY(4px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.pop-in {
+  animation: pop-in 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Tooltip used by stat cards. */
+[data-tip] {
+  position: relative;
+}
+[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--ink-900);
+  color: #e8eaed;
+  border: 1px solid var(--line);
+  font-size: 11px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 60;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }

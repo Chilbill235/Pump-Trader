@@ -188,10 +188,14 @@ export default function WalletPage() {
     <div className="space-y-4 pb-20">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="font-mono text-[11px] uppercase tracking-widest text-neon">Wallet</p>
-          <h1 className="mt-1 font-mono text-2xl tracking-wide">Your holdings</h1>
-          <p className="mt-1 text-xs text-mute">
-            Live balances, every SPL token, USD value, and quick actions. Updates in real time via WebSocket.
+          <p className="font-mono text-[10px] uppercase tracking-widest text-neon">Wallet</p>
+          <h1 className="mt-1 font-mono text-2xl tracking-wide">
+            <span className="text-gradient">Your</span>{" "}
+            <span className="text-white">holdings</span>
+          </h1>
+          <p className="mt-1 max-w-xl text-xs text-mute">
+            Live balances, every SPL token, USD value, and quick actions. Updates in real time via
+            WebSocket.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -253,52 +257,69 @@ function ConnectScreen() {
   const installable = wallets.filter((w) => !w.installed);
 
   return (
-    <div className="grid min-h-[70vh] place-items-center px-2 pb-20">
-      <div className="w-full max-w-lg space-y-5 rounded-2xl border border-line bg-gradient-to-br from-ink-800 to-ink-900 p-6 shadow-2xl">
+    <div className="relative grid min-h-[70vh] place-items-center overflow-hidden px-2 pb-20 pt-2">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 app-backdrop-strong opacity-70"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -right-32 top-10 h-72 w-72 rounded-full bg-neon/10 blur-3xl"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -bottom-24 -left-16 h-72 w-72 rounded-full bg-info/10 blur-3xl"
+      />
+      <div className="relative w-full max-w-lg space-y-4 rounded-2xl border border-line-soft bg-ink-900/80 p-6 shadow-2xl backdrop-blur-xl">
         <div className="text-center">
-          <span className="inline-flex items-center gap-2 rounded-full border border-line bg-ink-900 px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-mute">
+          <span className="inline-flex items-center gap-2 rounded-full border border-line bg-ink-850/80 px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-mute">
             <span className="h-1.5 w-1.5 rounded-full bg-neon live-pulse" />
             Local · Encrypted · No server
           </span>
-          <h1 className="mt-3 font-mono text-2xl tracking-widest text-neon">CONNECT WALLET</h1>
+          <h1 className="mt-3 font-mono text-3xl tracking-widest">
+            <span className="text-gradient">CONNECT</span>{" "}
+            <span className="text-white">WALLET</span>
+          </h1>
           <p className="mt-2 text-sm text-mute">
             We never see your keys. Pick a wallet to start trading. Your bot, positions, and settings
             stay on this device.
           </p>
         </div>
 
-        <div className="rounded-xl border border-line bg-ink-900 p-4">
+        <div className="rounded-xl border border-line-soft bg-ink-850/60 p-4">
           <div className="flex items-center justify-between">
-            <p className="font-mono text-[10px] uppercase tracking-widest text-mute">Detected on this device</p>
-            <ConnectWalletButton />
+            <p className="font-mono text-[10px] uppercase tracking-widest text-mute">
+              Detected on this device
+            </p>
+            <ConnectWalletButton variant="wide" />
           </div>
           {mounted && installed.length > 0 ? (
-            <ul className="mt-3 space-y-2">
+            <ul className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
               {installed.map((w) => (
                 <li
                   key={w.id}
-                  className="flex items-center justify-between rounded-lg border border-neon/30 bg-neon/5 px-3 py-2"
+                  className="flex items-center justify-between rounded-lg border border-neon/30 bg-neon/5 px-3 py-2.5"
                 >
-                  <span className="flex items-center gap-2 text-sm">
+                  <span className="flex items-center gap-2.5 text-sm">
                     <span
                       aria-hidden
-                      className="flex h-6 w-6 items-center justify-center rounded-full font-mono text-[10px] font-bold text-white"
+                      className="flex h-7 w-7 items-center justify-center rounded-full font-mono text-[11px] font-bold text-white"
                       style={{
                         background:
                           w.id === "phantom"
                             ? "#ab9ff2"
                             : w.id === "solflare"
-                            ? "#ffa133"
-                            : w.id === "trust"
-                            ? "#3375bb"
-                            : "#0052ff",
+                              ? "#ffa133"
+                              : w.id === "trust"
+                                ? "#3375bb"
+                                : "#0052ff",
                       }}
                     >
                       {w.id === "phantom" ? "P" : w.id === "solflare" ? "S" : w.id === "trust" ? "T" : "C"}
                     </span>
-                    <span>{w.name}</span>
+                    <span className="font-medium">{w.name}</span>
                   </span>
-                  <span className="rounded bg-neon/15 px-1.5 py-0.5 font-mono text-[10px] uppercase text-neon">
+                  <span className="rounded border border-neon/40 bg-neon/10 px-1.5 py-0.5 font-mono text-[10px] uppercase text-neon">
                     {w.inApp ? "in-app" : "installed"}
                   </span>
                 </li>
@@ -306,17 +327,20 @@ function ConnectScreen() {
             </ul>
           ) : mounted ? (
             <p className="mt-3 rounded-lg border border-warn/30 bg-warn/5 px-3 py-2 text-xs text-warn">
-              No wallet detected on this browser. {isMobile ? "Open this URL inside your wallet's browser." : "Install one to continue."}
+              No wallet detected on this browser.{" "}
+              {isMobile
+                ? "Open this URL inside your wallet's browser."
+                : "Install one to continue."}
             </p>
           ) : null}
         </div>
 
         {mounted && installable.length > 0 ? (
-          <div className="rounded-xl border border-line bg-ink-900 p-4">
+          <div className="rounded-xl border border-line-soft bg-ink-850/60 p-4">
             <p className="font-mono text-[10px] uppercase tracking-widest text-mute">
               {isMobile ? "Open in a wallet app" : "Install a wallet"}
             </p>
-            <ul className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <ul className="mt-3 grid grid-cols-2 gap-2">
               {installable.map((w) => (
                 <li key={w.id}>
                   <button
@@ -328,9 +352,27 @@ function ConnectScreen() {
                         window.open(w.installUrl, "_blank", "noopener,noreferrer");
                       }
                     }}
-                    className="press flex w-full items-center justify-between rounded-lg border border-line bg-ink-800 px-3 py-2 text-left hover:border-neon"
+                    className="press flex w-full items-center justify-between rounded-lg border border-line bg-ink-800 px-3 py-2.5 text-left hover:border-neon"
                   >
-                    <span className="text-sm">{w.name}</span>
+                    <span className="flex items-center gap-2 text-sm">
+                      <span
+                        aria-hidden
+                        className="flex h-6 w-6 items-center justify-center rounded-full font-mono text-[10px] font-bold text-white"
+                        style={{
+                          background:
+                            w.id === "phantom"
+                              ? "#ab9ff2"
+                              : w.id === "solflare"
+                                ? "#ffa133"
+                                : w.id === "trust"
+                                  ? "#3375bb"
+                                  : "#0052ff",
+                        }}
+                      >
+                        {w.id === "phantom" ? "P" : w.id === "solflare" ? "S" : w.id === "trust" ? "T" : "C"}
+                      </span>
+                      {w.name}
+                    </span>
                     <span className="font-mono text-[10px] uppercase text-mute">
                       {w.deeplink ? "open" : "install"} ↗
                     </span>
@@ -369,30 +411,37 @@ function BalanceCard(props: {
   const stale = props.totals.knownCount < props.holdingsCount;
 
   return (
-    <section className="relative overflow-hidden rounded-2xl border border-line bg-gradient-to-br from-ink-800 via-ink-900 to-ink-950 p-5 shadow-2xl">
+    <section className="relative overflow-hidden rounded-2xl border border-line-soft bg-gradient-to-br from-ink-800 via-ink-850 to-ink-900 p-5 shadow-card">
       <div
         aria-hidden
-        className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full opacity-30 blur-3xl"
+        className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full opacity-40 blur-3xl"
         style={{ background: "radial-gradient(circle, rgba(57,255,136,0.5), transparent 70%)" }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -bottom-24 -left-16 h-64 w-64 rounded-full opacity-30 blur-3xl"
+        style={{ background: "radial-gradient(circle, rgba(14,165,233,0.4), transparent 70%)" }}
       />
       <div className="relative flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <p className="font-mono text-[10px] uppercase tracking-widest text-mute">Total balance</p>
             {props.live ? (
-              <span className="inline-flex items-center gap-1 rounded bg-neon/10 px-1.5 py-0.5 font-mono text-[10px] text-neon">
+              <span className="inline-flex items-center gap-1 rounded border border-neon/30 bg-neon/10 px-1.5 py-0.5 font-mono text-[10px] text-neon">
                 <span className="h-1.5 w-1.5 rounded-full bg-neon live-pulse" />
                 live
               </span>
             ) : null}
           </div>
-          <p className="mt-2 font-mono text-4xl font-semibold tracking-tight">
-            {props.sol != null ? props.sol.toFixed(4) : "—"}
+          <p className="mt-2 font-mono text-4xl font-semibold tracking-tight sm:text-5xl">
+            <span className="text-gradient">
+              {props.sol != null ? props.sol.toFixed(4) : "—"}
+            </span>
             <span className="ml-2 text-base text-mute">SOL</span>
           </p>
           <p className="mt-1 font-mono text-sm text-mute">
             {totalUsd != null ? `≈ $${totalUsd.toFixed(2)}` : "…"}
-            {props.solUsd != null ? <span className="ml-2 text-[11px] text-mute">· SOL ${props.solUsd.toFixed(2)}</span> : null}
+            {props.solUsd != null ? <span className="ml-2 text-[11px] text-mute-2">· SOL ${props.solUsd.toFixed(2)}</span> : null}
           </p>
           {stale ? (
             <p className="mt-1 font-mono text-[10px] text-warn">
@@ -453,12 +502,13 @@ function HoldingsPanel(props: {
   accountId: string | null;
 }) {
   return (
-    <section className="rounded-2xl border border-line bg-ink-800">
-      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
+    <section className="overflow-hidden rounded-2xl border border-line-soft bg-ink-900/60 shadow-card">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line/60 bg-ink-850/60 px-4 py-3">
         <div>
           <h2 className="font-mono text-sm uppercase tracking-widest text-mute">Holdings</h2>
           <p className="mt-0.5 font-mono text-[11px] text-mute">
-            {props.holdings.length} SPL token{props.holdings.length === 1 ? "" : "s"} · tap to trade
+            {props.holdings.length} SPL token{props.holdings.length === 1 ? "" : "s"} · tap to
+            trade
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -467,12 +517,12 @@ function HoldingsPanel(props: {
             value={props.search}
             onChange={(e) => props.setSearch(e.target.value)}
             placeholder="Search…"
-            className="w-32 rounded border border-line bg-ink-900 px-2 py-1 font-mono text-xs sm:w-40"
+            className="w-32 rounded-md border border-line bg-ink-900 px-2.5 py-1.5 font-mono text-xs outline-none focus:border-neon sm:w-40"
           />
           <select
             value={props.filter}
             onChange={(e) => props.setFilter(e.target.value as FilterKey)}
-            className="rounded border border-line bg-ink-900 px-2 py-1 font-mono text-xs"
+            className="rounded-md border border-line bg-ink-900 px-2.5 py-1.5 font-mono text-xs outline-none focus:border-neon"
           >
             <option value="all">All venues</option>
             <option value="pump">pump only</option>
@@ -481,18 +531,18 @@ function HoldingsPanel(props: {
           <select
             value={props.sortBy}
             onChange={(e) => props.setSortBy(e.target.value as SortKey)}
-            className="rounded border border-line bg-ink-900 px-2 py-1 font-mono text-xs"
+            className="rounded-md border border-line bg-ink-900 px-2.5 py-1.5 font-mono text-xs outline-none focus:border-neon"
           >
             <option value="value">Sort: value</option>
             <option value="amount">Sort: amount</option>
             <option value="name">Sort: name</option>
           </select>
-          <label className="flex items-center gap-1 font-mono text-[11px] text-mute">
+          <label className="flex items-center gap-1.5 rounded-md border border-line bg-ink-900 px-2.5 py-1.5 font-mono text-[11px] text-mute">
             <input
               type="checkbox"
               checked={props.hiddenDust}
               onChange={(e) => props.setHiddenDust(e.target.checked)}
-              className="accent-neon"
+              className="h-3 w-3 accent-neon"
             />
             hide &lt;$0.50
           </label>
@@ -531,9 +581,9 @@ function HoldingsPanel(props: {
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-lg border border-line/40 bg-ink-900/60 p-2.5">
-      <p className="font-mono text-[10px] uppercase tracking-wide text-mute">{label}</p>
-      <p className="mt-0.5 font-mono text-sm">{value}</p>
+    <div className="rounded-lg border border-line-soft bg-ink-900/60 p-2.5">
+      <p className="font-mono text-[10px] uppercase tracking-widest text-mute-2">{label}</p>
+      <p className="mt-1 font-mono text-base text-white">{value}</p>
       {sub ? <p className="font-mono text-[10px] text-mute">{sub}</p> : null}
     </div>
   );
@@ -541,15 +591,15 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
 
 function HoldingsSkeleton() {
   return (
-    <ul className="divide-y divide-line">
+    <ul className="divide-y divide-line/60">
       {Array.from({ length: 4 }).map((_, i) => (
         <li key={i} className="flex items-center gap-3 px-4 py-3">
-          <div className="h-8 w-8 animate-pulse rounded-full bg-ink-700" />
+          <div className="h-8 w-8 shrink-0 rounded-full skeleton" />
           <div className="flex-1 space-y-2">
-            <div className="h-3 w-1/3 animate-pulse rounded bg-ink-700" />
-            <div className="h-2 w-1/2 animate-pulse rounded bg-ink-700" />
+            <div className="h-3 w-1/3 rounded skeleton" />
+            <div className="h-2 w-1/2 rounded skeleton" />
           </div>
-          <div className="h-4 w-16 animate-pulse rounded bg-ink-700" />
+          <div className="h-4 w-16 rounded skeleton" />
         </li>
       ))}
     </ul>
