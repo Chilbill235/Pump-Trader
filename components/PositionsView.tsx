@@ -1,7 +1,6 @@
 "use client";
 
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 import BN from "bn.js";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -17,6 +16,7 @@ import { loadWalletPortfolio, type WalletToken } from "@/lib/portfolio";
 import { quoteTrade } from "@/lib/sdk";
 import { getSolUsd, quoteTokenToSol } from "@/lib/token-value";
 import { fetchJupiterUsdPrice, getKnownTokenMeta } from "@/lib/jupiter";
+import { useWalletData } from "./WalletDataProvider";
 import type { Position } from "@/lib/types";
 import { CoinImage } from "./CoinImage";
 import { CopyButton } from "./CopyButton";
@@ -43,12 +43,11 @@ export function PositionsView() {
   const { publicKey, connected } = wallet;
   const { settings } = useSettings();
   const accountId = useActiveAccountId();
+  const walletData = useWalletData();
   const [rows, setRows] = useState<Row[]>([]);
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [holdingsErr, setHoldingsErr] = useState<string | null>(null);
   const [holdingsLoading, setHoldingsLoading] = useState(false);
-  const [sol, setSol] = useState<number | null>(null);
-  const [solErr, setSolErr] = useState<string | null>(null);
   const [solUsd, setSolUsd] = useState<number | null>(null);
   const [tradeMint, setTradeMint] = useState<string | null>(null);
 
@@ -90,17 +89,24 @@ export function PositionsView() {
     setHoldingsLoading(true);
     setHoldingsErr(null);
     try {
-      const tokens = await loadWalletPortfolio(connection, publicKey, async (mint) => {
-        try {
-          const res = await fetch(`/api/coins/${mint}`, { cache: "no-store" });
-          const j = (await res.json()) as { coin: { name: string; symbol: string; imageUri?: string } | null };
-          return j.coin
-            ? { name: j.coin.name, symbol: j.coin.symbol, imageUri: j.coin.imageUri }
-            : null;
-        } catch {
-          return null;
-        }
-      });
+      // If the provider already has holdings, reuse them. Otherwise load fresh.
+      const tokens = walletData.holdings.length > 0
+        ? walletData.holdings
+        : await loadWalletPortfolio(connection, publicKey, async (mint) => {
+            try {
+              const res = await fetch(`/api/coins/${mint}`, { cache: "no-store" });
+              const j = (await res.json()) as {
+                coin: { name: string; symbol: string; imageUri?: string } | null;
+              };
+              return j.coin
+                ? { name: j.coin.name, symbol: j.coin.symbol, imageUri: j.coin.imageUri }
+                : null;
+            } catch {
+              return null;
+            }
+          });
+      // Trigger the provider to refresh so we stay in sync after sells/buys.
+      walletData.refresh();
       // Show every token the wallet holds, including dust and wrapped SOL
       // (native SOL is still shown separately at the top of the page for
       // convenience). The user explicitly asked for a complete list of
@@ -171,7 +177,7 @@ export function PositionsView() {
     } finally {
       setHoldingsLoading(false);
     }
-  }, [connection, publicKey, settings.slippagePct, solUsd]);
+  }, [connection, publicKey, settings.slippagePct, solUsd, walletData]);
 
   useEffect(() => {
     void refreshLocal();
@@ -199,40 +205,8 @@ export function PositionsView() {
     };
   }, []);
 
-  useEffect(() => {
-    const key = publicKey;
-    if (!key) {
-      setSol(null);
-      return;
-    }
-    let cancelled = false;
-    let retries = 0;
-    const maxRetries = 2;
-    async function fetchBalance() {
-      try {
-        const l = await connection.getBalance(key!);
-        if (!cancelled) {
-          setSol(l / LAMPORTS_PER_SOL);
-          setSolErr(null);
-        }
-      } catch (err) {
-        retries++;
-        const msg = err instanceof Error ? err.message : String(err);
-        const isForbidden = msg.includes("403") || msg.toLowerCase().includes("forbidden");
-        if (isForbidden && retries <= maxRetries && !cancelled) {
-          setTimeout(fetchBalance, 1000 * retries);
-          return;
-        }
-        if (!cancelled) {
-          setSolErr(isForbidden ? "Public RPC blocked balance check. Use a custom RPC in Settings." : msg);
-        }
-      }
-    }
-    fetchBalance();
-    return () => {
-      cancelled = true;
-    };
-  }, [connection, publicKey]);
+  const sol = walletData.sol;
+  const solErr = walletData.error;
 
   const totalSol = sol ?? 0;
   const totalHoldingsSol = holdings.reduce((s, h) => {

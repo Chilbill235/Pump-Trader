@@ -713,6 +713,13 @@ export function evaluateLaunchBatch(
     openPositionsCount: number;
     now?: number;
     momentumByMint?: Record<string, number>;
+    learning?: {
+      narrativeWinRate: Record<string, { wins: number; losses: number; rate: number }>;
+      symbolHitRate: Record<string, { wins: number; losses: number; rate: number }>;
+      sizeFraction: number;
+      health: number;
+      sampleSize: number;
+    };
   },
 ): PipelineDecision[] {
   const now = extras.now ?? Date.now();
@@ -727,15 +734,65 @@ export function evaluateLaunchBatch(
     openPositionsCount: extras.openPositionsCount,
     momentumByMint: extras.momentumByMint ?? {},
   };
+  const learning = extras.learning;
   const out: PipelineDecision[] = [];
   for (const coin of coins) {
     const decision = evaluateCoin(coin, settings, ctx);
+    // Adaptive learning: bias the queued size based on the bot's recent
+    // performance on this narrative / symbol. We never OVERSIZE beyond the
+    // user's per-coin cap, but we can downsize when the bot is cold.
+      if (learning && decision.action === "queue" && decision.sizeSol != null) {
+        if (learning.sampleSize >= 8) {
+          const narKey = pickNarrativeKey(coin.name) ?? pickNarrativeKey(coin.symbol);
+          let mult = learning.sizeFraction * learning.health;
+          const why: string[] = [];
+        if (narKey) {
+          const nr = learning.narrativeWinRate[narKey];
+          if (nr && nr.wins + nr.losses >= 3) {
+            if (nr.rate < 0.3) {
+              mult *= 0.5;
+              why.push(`narrative ${narKey} ${(nr.rate * 100).toFixed(0)}% win`);
+            } else if (nr.rate > 0.7) {
+              mult *= 1.1;
+              why.push(`narrative ${narKey} ${(nr.rate * 100).toFixed(0)}% win`);
+            }
+          }
+        }
+        const sym = learning.symbolHitRate[coin.symbol.toLowerCase()];
+        if (sym && sym.wins + sym.losses >= 2 && sym.rate < 0.3) {
+          mult *= 0.4;
+          why.push(`symbol ${coin.symbol} lost before`);
+        }
+        mult = Math.max(0.1, Math.min(1, mult));
+        const newSize = Math.max(0.0001, decision.sizeSol * mult);
+        if (newSize < decision.sizeSol - 1e-9) {
+          decision.sizeSol = newSize;
+          decision.reason = `${decision.reason} · learned sizing ×${mult.toFixed(2)} (${why.join(", ") || "robot health"})`;
+        }
+      }
+    }
     out.push(decision);
     if (decision.action === "queue" && decision.sizeSol) {
       ctx.dailyAtRiskSol += decision.sizeSol;
     }
   }
   return out;
+}
+
+function pickNarrativeKey(name: string): string | null {
+  const lower = name.toLowerCase();
+  const keys = [
+    "pepe", "doge", "shib", "floki", "bonk", "wif", "myro", "popcat",
+    "ai", "gpt", "agent",
+    "trump", "elon", "musk",
+    "sol", "solana", "jupiter",
+    "cat", "dog", "frog", "inu",
+    "moon", "rocket",
+  ];
+  for (const k of keys) {
+    if (lower.includes(k)) return k;
+  }
+  return null;
 }
 
 export function decisionToLog(

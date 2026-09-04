@@ -13,6 +13,7 @@ import { simulateAndSend } from "@/lib/trade";
 import type { AppAlert, Position } from "@/lib/types";
 import { useSettings } from "./SettingsProvider";
 import { useActiveAccountId } from "./AccountsProvider";
+import { useWalletData } from "./WalletDataProvider";
 
 function loadAlerts(accountId: string | null): AppAlert[] {
   if (!accountId) return [];
@@ -40,6 +41,7 @@ export function TpSlWatcher() {
   const wallet = useWallet();
   const { settings } = useSettings();
   const accountId = useActiveAccountId();
+  const walletData = useWalletData();
   const [banner, setBanner] = useState<AppAlert | null>(null);
 
   useEffect(() => {
@@ -146,6 +148,7 @@ export function TpSlWatcher() {
                 ? `paper auto-sell at ${pnl.toFixed(2)}%`
                 : `live auto-sell at ${pnl.toFixed(2)}%`,
             });
+            walletData.refresh();
           } catch (err) {
             autoSold = false;
             appendBotLog(accountId, {
@@ -187,6 +190,9 @@ export function TpSlWatcher() {
       cancelled = true;
       clearInterval(id);
     };
+  // Only re-run when the relevant settings/wallet change. walletData.refresh
+  // is stable enough (depends only on the connection) that we ignore it here.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connection, wallet, settings.autoSell, settings.simulateMode, settings.slippagePct, accountId]);
 
   if (!banner) return null;

@@ -13,7 +13,7 @@ import { CopyButton } from "./CopyButton";
 import { QuickTradePanel } from "./QuickTradePanel";
 import { MobileTradeSheet } from "./MobileTradeSheet";
 import { isMobileDevice } from "@/lib/mobile";
-import { useWalletHoldings } from "./useWalletHoldings";
+import { useWalletData } from "./WalletDataProvider";
 
 export function CoinView({ mint }: { mint: string }) {
   const { connection } = useConnection();
@@ -24,7 +24,7 @@ export function CoinView({ mint }: { mint: string }) {
   const [solUsd, setSolUsd] = useState<number | null>(null);
   const [tradeOpen, setTradeOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const { holdings } = useWalletHoldings();
+  const { holdings } = useWalletData();
 
   useEffect(() => {
     const update = () => setIsMobile(isMobileDevice());

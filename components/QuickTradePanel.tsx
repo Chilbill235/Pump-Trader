@@ -3,7 +3,7 @@
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import BN from "bn.js";
 import { useEffect, useMemo, useState } from "react";
-import { Connection, PublicKey } from "@solana/web3.js";
+import { Connection } from "@solana/web3.js";
 import { SOLSCAN_TX, TOKEN_DECIMALS } from "@/lib/constants";
 import { lamportsToSol, shortenAddress, tokensToUi, uiToTokens } from "@/lib/format";
 import { upsertPositionFromFill } from "@/lib/positions";
@@ -30,6 +30,7 @@ import {
   type JupiterQuote,
 } from "@/lib/jupiter";
 import { fetchMintDecimals, getSolUsd } from "@/lib/token-value";
+import { useWalletData } from "./WalletDataProvider";
 import type { WalletToken } from "@/lib/portfolio";
 
 type HoldingLike = WalletToken & {
@@ -219,6 +220,7 @@ export function QuickTradePanel(props: Props) {
   const wallet = useWallet();
   const { settings } = useSettings();
   const accountId = useActiveAccountId();
+  const walletData = useWalletData();
   const decimals = TOKEN_DECIMALS;
   const symbol = props.symbol ?? "???";
 
@@ -332,57 +334,16 @@ export function QuickTradePanel(props: Props) {
   }, [connection, inMint]);
 
   useEffect(() => {
-    let cancelled = false;
+    // Use the shared WalletDataProvider so we don't re-hit RPCs in every
+    // trade panel. The provider is also WebSocket-subscribed so the
+    // balance updates the moment a tx lands.
     if (inMint === SOL_MINT) {
-      if (wallet.publicKey) {
-        void connection
-          .getBalance(wallet.publicKey, "confirmed")
-          .then((l) => {
-            if (!cancelled) setInBalance(l / 1e9);
-          })
-          .catch(() => {
-            if (!cancelled) setInBalance(null);
-          });
-      } else {
-        setInBalance(null);
-      }
-      return () => {
-        cancelled = true;
-      };
+      setInBalance(walletData.sol);
+    } else {
+      const found = walletData.holdings.find((h) => h.mint === inMint);
+      setInBalance(found ? (Number.isFinite(found.uiAmount) ? found.uiAmount : null) : null);
     }
-    // SPL balance
-    if (!wallet.publicKey) {
-      setInBalance(null);
-      return () => {
-        cancelled = true;
-      };
-    }
-    (async () => {
-      try {
-        const resp = await connection.getParsedTokenAccountsByOwner(
-          new PublicKey(wallet.publicKey!.toBase58()),
-          { programId: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA") },
-        );
-        let found: number | null = null;
-        for (const acc of resp.value) {
-          const mint = (acc.account.data as { parsed?: { info?: { mint?: string; tokenAmount?: { uiAmount?: number } } } })
-            ?.parsed?.info?.mint;
-          if (mint === inMint) {
-            const ui = (acc.account.data as { parsed?: { info?: { tokenAmount?: { uiAmount?: number } } } })
-              ?.parsed?.info?.tokenAmount?.uiAmount;
-            if (typeof ui === "number") found = ui;
-            break;
-          }
-        }
-        if (!cancelled) setInBalance(found);
-      } catch {
-        if (!cancelled) setInBalance(null);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [connection, inMint, wallet.publicKey]);
+  }, [inMint, walletData.sol, walletData.holdings]);
 
   const inSymbol = useMemo(() => {
     return shortTokenLabel(inMint, inputOptions.find((o) => o.mint === inMint)?.symbol);
@@ -592,7 +553,8 @@ export function QuickTradePanel(props: Props) {
       // Pre-flight SOL balance (only relevant for SOL input or pump program ATA rent).
       if (side === "buy" && !settings.simulateMode && wallet.publicKey && inMint === SOL_MINT) {
         const lamports = parsed.inRaw;
-        const bal = await connection.getBalance(wallet.publicKey, "confirmed");
+        const { getBalanceWithFallback } = await import("@/lib/connection");
+        const { lamports: bal } = await getBalanceWithFallback(connection, wallet.publicKey);
         const bufferLamports = Math.round(MIN_SOL_RESERVED_FOR_FEES * 1e9);
         const need = lamports.toNumber() + bufferLamports;
         if (bal < need) {
@@ -716,6 +678,10 @@ export function QuickTradePanel(props: Props) {
         signature: result.receipt.signature,
         paper: result.receipt.paper,
       });
+      // Trigger wallet balance / holdings refresh so the header and Positions
+      // page reflect the fill immediately. The WebSocket subscription will
+      // also fire on-chain; this is just an immediate UI nudge.
+      walletData.refresh();
       if (result.receipt.paper) {
         setReceipt({ note: "Paper fill — no transaction sent. Recorded locally for tracking." });
       } else if (result.receipt.signature) {

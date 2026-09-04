@@ -42,6 +42,7 @@ export const PIPELINE_DAILY_KEY = "pipeline-daily:v1";
 export const BANKROLL_KEY = "bankroll-config:v1";
 export const BOT_LOG_KEY = "bot-log:v1";
 export const BOT_SESSION_KEY = "bot-session:v1";
+export const BOT_DRAFT_KEY = "bot-draft:v1";
 export const CLOSED_TRADES_KEY = "closed-trades:v1";
 export const EQUITY_KEY = "equity:v1";
 export const PEAK_KEY = "peak-equity:v1";

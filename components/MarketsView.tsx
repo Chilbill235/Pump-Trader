@@ -9,7 +9,7 @@ import { CopyButton } from "./CopyButton";
 import { QuickTradePanel } from "./QuickTradePanel";
 import { MobileTradeSheet } from "./MobileTradeSheet";
 import { isMobileDevice } from "@/lib/mobile";
-import { useWalletHoldings } from "./useWalletHoldings";
+import { useWalletData } from "./WalletDataProvider";
 
 type Kind = "trending" | "newest";
 
@@ -22,7 +22,7 @@ export function MarketsView() {
   const [loading, setLoading] = useState(true);
   const [activeMint, setActiveMint] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
-  const { holdings } = useWalletHoldings();
+  const { holdings } = useWalletData();
 
   useEffect(() => {
     const update = () => setIsMobile(isMobileDevice());

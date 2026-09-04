@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { DEFAULT_RPC } from "@/lib/constants";
 import { useSettings } from "./SettingsProvider";
 import { useActiveAccountId } from "./AccountsProvider";
@@ -8,6 +9,15 @@ import { getAccountPrefix } from "@/lib/accounts";
 export function SettingsView() {
   const { settings, update } = useSettings();
   const accountId = useActiveAccountId();
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+
+  // Brief "saved" pulse so the user can see autosave is working.
+  useEffect(() => {
+    if (!settings) return;
+    setSavedAt(Date.now());
+    const id = setTimeout(() => setSavedAt((v) => (v && Date.now() - v > 1500 ? v : null)), 1600);
+    return () => clearTimeout(id);
+  }, [settings]);
 
   const exportData = () => {
     const data: Record<string, unknown> = {};
@@ -65,6 +75,13 @@ export function SettingsView() {
         <p className="text-xs text-mute">
           Stored in this browser only, scoped to your account. No custodial backend. Never paste a
           private key.
+        </p>
+        <p
+          className={`mt-1 font-mono text-[11px] transition-opacity ${
+            savedAt ? "text-neon opacity-100" : "text-mute opacity-60"
+          }`}
+        >
+          {savedAt ? "✓ autosaved" : "autosaves as you type"}
         </p>
       </div>
 

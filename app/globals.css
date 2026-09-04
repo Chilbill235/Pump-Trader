@@ -137,3 +137,43 @@ body[data-in-app-browser="1"] header {
     width: 100%;
   }
 }
+
+/* Reusable utilities. */
+@layer utilities {
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .touch-target {
+    /* Apple's HIG minimum touch target is 44x44. */
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .press {
+    /* Tight mobile feedback on tap. */
+    transition: transform 80ms ease, background-color 80ms ease;
+  }
+  .press:active {
+    transform: scale(0.97);
+  }
+}
+
+/* Subtle pulse used for "live" indicators. */
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+.live-pulse {
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+
+/* Auto-grow select / dropdowns to full width on small screens. */
+@media (max-width: 640px) {
+  .table-wrap {
+    /* Allow horizontal scroll without overflowing the viewport. */
+    -webkit-overflow-scrolling: touch;
+  }
+  h1 { line-height: 1.2; }
+}

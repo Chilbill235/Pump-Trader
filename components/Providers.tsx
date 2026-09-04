@@ -6,6 +6,7 @@ import { AppWalletProvider } from "./WalletProvider";
 import { AppShell } from "./AppShell";
 import { LoginScreen } from "./LoginScreen";
 import { TpSlWatcher } from "./TpSlWatcher";
+import { WalletDataProvider } from "./WalletDataProvider";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -28,10 +29,12 @@ function Gate({ children }: { children: React.ReactNode }) {
   return (
     <SettingsProvider>
       <AppWalletProvider>
-        <AppShell>
-          <TpSlWatcher />
-          {children}
-        </AppShell>
+        <WalletDataProvider>
+          <AppShell>
+            <TpSlWatcher />
+            {children}
+          </AppShell>
+        </WalletDataProvider>
       </AppWalletProvider>
     </SettingsProvider>
   );

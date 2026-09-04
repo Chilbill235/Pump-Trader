@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
-import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { useWallet } from "@solana/wallet-adapter-react";
 import { useEffect, useRef, useState } from "react";
 import { appendBotLog } from "@/lib/bot-log";
 import { useSettings } from "./SettingsProvider";
@@ -15,7 +14,7 @@ import { PUBLIC_RPC_WARNING } from "@/lib/constants";
 import { BOT_SESSION_KEY } from "@/lib/constants";
 import { safeReadScoped, removeScoped } from "@/lib/accounts";
 import { SUPPORTED_MOBILE_WALLETS, deepLinkOpen, openUniversal } from "@/lib/mobile";
-import { useWalletHoldings } from "./useWalletHoldings";
+import { useWalletData } from "./WalletDataProvider";
 
 const NAV = [
   { href: "/", label: "Markets" },
@@ -28,14 +27,13 @@ const NAV = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { settings, update } = useSettings();
-  const { connection } = useConnection();
-  const { publicKey, connected } = useWallet();
+  const wallet = useWallet();
+  const { publicKey, connected } = wallet;
   const { activeAccount, lock, accounts, switchTo, remove } = useAccounts();
-  const [sol, setSol] = useState<number | null>(null);
-  const [solErr, setSolErr] = useState<string | null>(null);
+  const walletData = useWalletData();
+  const { sol, holdings, live, endpoint } = walletData;
   const [mounted, setMounted] = useState(false);
   const [botModalOpen, setBotModalOpen] = useState(false);
-  const { holdings } = useWalletHoldings();
   type BotSessionInfo = {
     startedAt: number;
     durationHours: number;
@@ -50,6 +48,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setNavOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [navOpen]);
 
   useEffect(() => {
     if (!activeAccount) {
@@ -78,41 +85,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const walletOk = publicKey && connected;
   const autoTradeActive = settings.autoTrade && settings.pipelineEnabled;
   const botRunning = autoTradeActive && !!botSession;
-
-  useEffect(() => {
-    const key = publicKey;
-    if (!key) {
-      setSol(null);
-      return;
-    }
-    let cancelled = false;
-    let retries = 0;
-    const maxRetries = 2;
-    async function fetchBalance() {
-      try {
-        const lamports = await connection.getBalance(key!);
-        if (!cancelled) {
-          setSol(lamports / LAMPORTS_PER_SOL);
-          setSolErr(null);
-        }
-      } catch (err) {
-        retries++;
-        const msg = err instanceof Error ? err.message : String(err);
-        const isForbidden = msg.includes("403") || msg.toLowerCase().includes("forbidden");
-        if (isForbidden && retries <= maxRetries && !cancelled) {
-          setTimeout(fetchBalance, 1000 * retries);
-          return;
-        }
-        if (!cancelled) {
-          setSolErr(isForbidden ? "Public RPC blocked" : msg);
-        }
-      }
-    }
-    void fetchBalance();
-    return () => {
-      cancelled = true;
-    };
-  }, [connection, publicKey]);
 
   function stopBot() {
     appendBotLog(
@@ -144,21 +116,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-ink-950 text-zinc-100">
-      <header className="sticky top-0 z-30 border-b border-line bg-ink-900/95 backdrop-blur">
+      <header className="sticky top-0 z-30 border-b border-line bg-ink-900/95 backdrop-blur safe-top">
         <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-2 px-3 py-2.5 sm:gap-3 sm:px-4">
           <button
             type="button"
-            className="shrink-0 rounded border border-line px-2 py-1 text-sm sm:hidden"
+            className="touch-target press shrink-0 rounded border border-line px-2 py-1 text-base sm:hidden"
             onClick={() => setNavOpen((v) => !v)}
             aria-label="Toggle menu"
+            aria-expanded={navOpen}
           >
             {navOpen ? "✕" : "☰"}
           </button>
-          <Link href="/" className="shrink-0 font-mono text-sm tracking-widest text-neon">
+          <Link href="/" className="shrink-0 font-mono text-sm tracking-widest text-neon press">
             PUMP TRADER
           </Link>
           <nav
-            className={`${navOpen ? "flex" : "hidden"} w-full flex-col gap-1 text-sm sm:!flex sm:w-auto sm:flex-row sm:items-center`}
+            className={`${navOpen ? "flex" : "hidden"} w-full flex-col gap-1 rounded border border-line/40 bg-ink-800/80 p-2 text-sm shadow-xl sm:!flex sm:w-auto sm:flex-row sm:items-center sm:gap-0 sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none`}
           >
             {NAV.map((item) => {
               const active =
@@ -170,7 +143,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   key={item.href}
                   href={item.href}
                   onClick={() => setNavOpen(false)}
-                  className={`rounded px-3 py-1.5 ${
+                  className={`touch-target press rounded px-3 py-2 sm:py-1.5 ${
                     active
                       ? "bg-ink-700 text-white"
                       : "text-mute hover:bg-ink-700 hover:text-white"
@@ -187,7 +160,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <button
                   type="button"
                   onClick={stopBot}
-                  className="shrink-0 rounded border border-danger/60 bg-danger/10 px-2 py-1 font-mono text-[11px] text-danger hover:bg-danger/20"
+                  className="touch-target press shrink-0 rounded border border-danger/60 bg-danger/10 px-2.5 py-1 font-mono text-[11px] text-danger hover:bg-danger/20"
                   title={`Started ${new Date(botSession!.startedAt).toLocaleTimeString()}`}
                 >
                   STOP BOT
@@ -196,7 +169,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <button
                   type="button"
                   onClick={() => setBotModalOpen(true)}
-                  className="shrink-0 rounded border border-neon/60 bg-neon/10 px-2 py-1 font-mono text-[11px] text-neon hover:bg-neon/20"
+                  className="touch-target press shrink-0 rounded border border-neon/60 bg-neon/10 px-2.5 py-1 font-mono text-[11px] text-neon hover:bg-neon/20"
                 >
                   START BOT
                 </button>
@@ -212,11 +185,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               {settings.simulateMode ? "SIMULATE" : "LIVE MAINNET"}
             </span>
             {botRunning ? (
-              <span className="hidden shrink-0 rounded border border-neon/40 bg-neon/10 px-2 py-0.5 font-mono text-[11px] text-neon animate-pulse sm:inline">
+              <span className="live-pulse hidden shrink-0 rounded border border-neon/40 bg-neon/10 px-2 py-0.5 font-mono text-[11px] text-neon sm:inline">
                 BOT RUNNING
               </span>
             ) : autoTradeActive ? (
-              <span className="hidden shrink-0 rounded border border-neon/40 bg-neon/10 px-2 py-0.5 font-mono text-[11px] text-neon animate-pulse sm:inline">
+              <span className="live-pulse hidden shrink-0 rounded border border-neon/40 bg-neon/10 px-2 py-0.5 font-mono text-[11px] text-neon sm:inline">
                 AUTO-TRADE ON
               </span>
             ) : null}
@@ -224,16 +197,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <span
                 className="shrink-0 font-mono text-xs text-mute"
                 title={
-                  holdings.length > 0
-                    ? `${holdings.length} SPL token${holdings.length === 1 ? "" : "s"} in this wallet`
-                    : "Wallet SPL tokens will load once connected"
+                  endpoint
+                    ? `via ${endpoint}${live ? " · live" : " · polled"}`
+                    : "Wallet balance"
                 }
               >
-                {solErr
-                  ? "RPC err"
-                  : sol == null
-                    ? "SOL …"
-                    : `${sol.toFixed(4)} SOL${holdings.length > 0 ? ` · ${holdings.length} SPL` : ""}`}
+                {sol == null
+                  ? "SOL …"
+                  : `${sol.toFixed(4)} SOL${holdings.length > 0 ? ` · ${holdings.length} SPL` : ""}`}
+                {live ? (
+                  <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-neon live-pulse align-middle" />
+                ) : null}
               </span>
             ) : null}
             {mounted ? (
@@ -244,10 +218,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <button
               type="button"
               onClick={() => setShowMobileConnect(true)}
-              className="shrink-0 rounded border border-line bg-ink-800 px-2 py-1 font-mono text-[11px] text-mute hover:border-neon hover:text-neon sm:hidden"
+              className="touch-target press shrink-0 rounded border border-line bg-ink-800 px-2 py-1 font-mono text-[11px] text-mute hover:border-neon hover:text-neon sm:hidden"
               title="Open in a wallet app"
             >
-              Open in wallet ↗
+              Wallet ↗
             </button>
             <AccountMenu
               open={acctMenuOpen}

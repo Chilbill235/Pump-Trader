@@ -7,8 +7,9 @@ import { appendBotLog } from "@/lib/bot-log";
 import { useSettings } from "./SettingsProvider";
 import { useActiveAccountId } from "./AccountsProvider";
 import { validateBotStart } from "@/lib/trade-limits";
-import { BOT_SESSION_KEY } from "@/lib/constants";
-import { safeWriteScoped } from "@/lib/accounts";
+import { BOT_DRAFT_KEY, BOT_SESSION_KEY } from "@/lib/constants";
+import { safeReadScoped, safeWriteScoped } from "@/lib/accounts";
+import { getBalanceWithFallback } from "@/lib/connection";
 
 type Props = {
   open: boolean;
@@ -37,6 +38,72 @@ export function StartBotModal({ open, onClose }: Props) {
   const [solUsd, setSolUsd] = useState<number | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
 
+  // Rehydrate the user's previous bot config when the modal opens. We pull
+  // from a per-account draft so the modal "remembers" what they typed last
+  // time (and across bot starts/stops) instead of resetting to defaults.
+  useEffect(() => {
+    if (!open || !accountId) return;
+    const draft = safeReadScoped<{
+      durationH?: number;
+      maxTrades?: number;
+      perCoinCapSol?: number;
+      maxOpenPos?: number;
+      dailyLossSol?: number;
+      slippage?: number;
+      tpPct?: number;
+      slPct?: number;
+      simulate?: boolean;
+    } | null>(accountId, BOT_DRAFT_KEY, null);
+    if (draft) {
+      if (typeof draft.durationH === "number") setDurationH(draft.durationH);
+      if (typeof draft.maxTrades === "number") setMaxTrades(draft.maxTrades);
+      if (typeof draft.perCoinCapSol === "number") setPerCoinCapSol(draft.perCoinCapSol);
+      if (typeof draft.maxOpenPos === "number") setMaxOpenPos(draft.maxOpenPos);
+      if (typeof draft.dailyLossSol === "number") setDailyLossSol(draft.dailyLossSol);
+      if (typeof draft.slippage === "number") setSlippage(draft.slippage);
+      if (typeof draft.tpPct === "number") setTpPct(draft.tpPct);
+      if (typeof draft.slPct === "number") setSlPct(draft.slPct);
+      if (typeof draft.simulate === "boolean") setSimulate(draft.simulate);
+    } else {
+      setPerCoinCapSol(settings.maxPositionSol);
+      setMaxOpenPos(settings.maxOpenPositions);
+      setDailyLossSol(settings.dailyLossLimit);
+      setSlippage(settings.slippagePct);
+      setSimulate(settings.simulateMode);
+    }
+    setConfirmAck(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, accountId]);
+
+  // Autosave every field the user changes so closing/cancelling still keeps
+  // their choices for next time. This fires after the first rehydrate too.
+  useEffect(() => {
+    if (!accountId || !open) return;
+    safeWriteScoped(accountId, BOT_DRAFT_KEY, {
+      durationH,
+      maxTrades,
+      perCoinCapSol,
+      maxOpenPos,
+      dailyLossSol,
+      slippage,
+      tpPct,
+      slPct,
+      simulate,
+    });
+  }, [
+    accountId,
+    open,
+    durationH,
+    maxTrades,
+    perCoinCapSol,
+    maxOpenPos,
+    dailyLossSol,
+    slippage,
+    tpPct,
+    slPct,
+    simulate,
+  ]);
+
   useEffect(() => {
     if (!open || !wallet.publicKey) {
       setBalanceLamports(null);
@@ -45,7 +112,7 @@ export function StartBotModal({ open, onClose }: Props) {
     let cancelled = false;
     (async () => {
       try {
-        const lamports = await connection.getBalance(wallet.publicKey!, "confirmed");
+        const { lamports } = await getBalanceWithFallback(connection, wallet.publicKey!);
         if (!cancelled) setBalanceLamports(lamports);
       } catch {
         if (!cancelled) setBalanceLamports(null);
@@ -105,6 +172,19 @@ export function StartBotModal({ open, onClose }: Props) {
         stopLossPct: slPct,
         requireMetadata: true,
       });
+      if (accountId) {
+        safeWriteScoped(accountId, BOT_DRAFT_KEY, {
+          durationH,
+          maxTrades,
+          perCoinCapSol,
+          maxOpenPos,
+          dailyLossSol,
+          slippage,
+          tpPct,
+          slPct,
+          simulate,
+        });
+      }
       appendBotLog(accountId, {
         kind: "start",
         simulate,

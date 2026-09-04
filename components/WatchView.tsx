@@ -42,6 +42,8 @@ import { loadClosedTrades } from "@/lib/stats";
 import { recordMomentumSample, type CoinMomentum } from "@/lib/momentum";
 import { DUMMY_USER, quoteTrade } from "@/lib/sdk";
 import { simulateAndSend } from "@/lib/trade";
+import { getBalanceWithFallback } from "@/lib/connection";
+import { loadLearningSnapshot } from "@/lib/learning";
 import type { PipelineCandidate, PipelineLogEntry, PumpCoin } from "@/lib/types";
 
 const POLL_MS = 20_000;
@@ -113,6 +115,7 @@ export function WatchView() {
         openPositionsCount: positions.length,
         now,
         momentumByMint,
+        learning: loadLearningSnapshot(accountId),
       });
       let nextLog = log;
       let nextCandidates = pending;
@@ -255,7 +258,7 @@ export function WatchView() {
       const cfg = loadBankrollConfig(accountId);
       if (cfg.enabled && settings.autoTrade) {
         const bankrollSol = wallet.publicKey
-          ? (await connection.getBalance(wallet.publicKey, "confirmed")) / 1e9
+          ? (await getBalanceWithFallback(connection, wallet.publicKey)).lamports / 1e9
           : 0;
         const closedTrades = loadClosedTrades(accountId);
         const realizedLoss = Math.max(
@@ -352,7 +355,7 @@ export function WatchView() {
       if (!wallet.publicKey) {
         throw new Error("Connect a Solana wallet first. This app never asks for a private key.");
       }
-      const bal = await connection.getBalance(wallet.publicKey, "confirmed");
+      const { lamports: bal } = await getBalanceWithFallback(connection, wallet.publicKey);
       const bufferLamports = Math.round(MIN_SOL_RESERVED_FOR_FEES * 1e9);
       const need = solLamports.toNumber() + bufferLamports;
       if (bal < need) {

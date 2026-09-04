@@ -4,13 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import BN from "bn.js";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 import {
   appendBotLog,
   botLogKindLabel,
   loadBotLog,
   type BotLogEntry,
 } from "@/lib/bot-log";
+import { getBalanceWithFallback } from "@/lib/connection";
 import {
   computeStats,
   loadClosedTrades,
@@ -27,10 +27,6 @@ import {
   type ClosedTrade,
   type Stats,
 } from "@/lib/stats";
-import { BOT_SESSION_KEY } from "@/lib/constants";
-import { safeReadScoped, removeScoped } from "@/lib/accounts";
-import { loadPositions, pnlPct } from "@/lib/positions";
-import { quoteTokenToSol } from "@/lib/token-value";
 import {
   DEFAULT_BANKROLL_CONFIG,
   evaluateBankroll,
@@ -38,6 +34,11 @@ import {
   saveBankrollConfig,
   type BankrollConfig,
 } from "@/lib/bankroll";
+import { loadLearningSnapshot, recomputeLearningNow, type LearningSnapshot } from "@/lib/learning";
+import { BOT_SESSION_KEY } from "@/lib/constants";
+import { safeReadScoped, removeScoped } from "@/lib/accounts";
+import { loadPositions, pnlPct } from "@/lib/positions";
+import { quoteTokenToSol } from "@/lib/token-value";
 import { CoinImage } from "./CoinImage";
 import { useSettings } from "./SettingsProvider";
 import { useActiveAccountId } from "./AccountsProvider";
@@ -72,6 +73,7 @@ export function BotView() {
   const [closedTrades, setClosedTrades] = useState<ClosedTrade[]>([]);
   const [equityCurve, setEquityCurve] = useState<EquityPoint[]>([]);
   const [bankrollCfg, setBankrollCfg] = useState<BankrollConfig>(DEFAULT_BANKROLL_CONFIG);
+  const [learning, setLearning] = useState<LearningSnapshot>(loadLearningSnapshot(null));
   const realizedLossRef = useRef<number>(0);
   const lastEquitiesRef = useRef<{ mint: string; qty: number; cost: number }[]>([]);
 
@@ -87,6 +89,7 @@ export function BotView() {
     setClosedTrades(loadClosedTrades(accountId));
     setEquityCurve(loadEquityCurve(accountId));
     setBankrollCfg(loadBankrollConfig(accountId));
+    setLearning(recomputeLearningNow(accountId));
   }, [accountId]);
 
   useEffect(() => {
@@ -103,8 +106,8 @@ export function BotView() {
   const refreshLive = useCallback(async () => {
     try {
       if (wallet.publicKey) {
-        const lamports = await connection.getBalance(wallet.publicKey, "confirmed");
-        setBankrollSol(lamports / LAMPORTS_PER_SOL);
+        const { lamports } = await getBalanceWithFallback(connection, wallet.publicKey);
+        setBankrollSol(lamports / 1e9);
       } else {
         setBankrollSol(null);
       }
@@ -224,16 +227,21 @@ export function BotView() {
     });
   }, [closedTrades, bankrollSol, positionsPnl, realizedPnlSol, accountId]);
 
-  // Kill-switch check.
+  // Kill-switch check. The drawdown threshold combines the user setting with
+  // the bot's learned adjustment (tightens when cold, loosens when hot).
   const realizedLossRefValue = realizedLossRef.current;
   useEffect(() => {
     if (!session || !accountId) return;
+    const learnedDrawdown = Math.max(
+      0.05,
+      Math.min(0.95, bankrollCfg.drawdownPct + learning.drawdownAddPct),
+    );
     const result = evaluateBankroll({
       accountId,
       bankrollSol: bankrollSol ?? 0,
       positionsValueSol: positionsPnl.reduce((s, p) => s + (p.valueSol ?? 0), 0),
       realizedLossSessionSol: realizedLossRefValue,
-      cfg: bankrollCfg,
+      cfg: { ...bankrollCfg, drawdownPct: learnedDrawdown },
     });
     if (result.killSwitch && result.killSwitchReason) {
       appendBotLog(accountId, {
@@ -256,7 +264,7 @@ export function BotView() {
       setSession(null);
       reload();
     }
-  }, [bankrollSol, positionsPnl, realizedLossRefValue, bankrollCfg, session, accountId, reload]);
+  }, [bankrollSol, positionsPnl, realizedLossRefValue, bankrollCfg, learning, session, accountId, reload]);
 
   const seenTradeIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
@@ -291,6 +299,7 @@ export function BotView() {
       });
     }
     setClosedTrades(loadClosedTrades(accountId));
+    if (accountId) setLearning(recomputeLearningNow(accountId));
   }, [log, accountId]);
 
   function exportLog() {
@@ -446,6 +455,8 @@ export function BotView() {
           control TP/SL per position in the Positions view.
         </p>
       </section>
+
+      <LearningPanel snap={learning} />
 
       {session ? (
         <div className="rounded border border-line bg-ink-800 p-3 font-mono text-[11px]">
@@ -619,6 +630,78 @@ export function BotView() {
         )}
       </section>
     </div>
+  );
+}
+
+function LearningPanel({ snap }: { snap: LearningSnapshot }) {
+  const hasData = snap.sampleSize >= 3;
+  const top = Object.entries(snap.narrativeWinRate)
+    .filter(([, v]) => v.wins + v.losses >= 2)
+    .sort((a, b) => b[1].rate - a[1].rate)
+    .slice(0, 6);
+  return (
+    <section className="rounded border border-line bg-ink-800 p-3">
+      <header className="mb-2 flex items-center justify-between">
+        <h2 className="font-mono text-[11px] uppercase tracking-wide text-mute">
+          Adaptive learning · {snap.sampleSize} trade{snap.sampleSize === 1 ? "" : "s"} analyzed
+        </h2>
+        <span
+          className={`font-mono text-[11px] ${
+            snap.health > 0.7 ? "text-neon" : snap.health < 0.5 ? "text-danger" : "text-warn"
+          }`}
+          title="Consecutive-loss-adjusted health. 1.0 = full health."
+        >
+          health {snap.health.toFixed(2)}
+        </span>
+      </header>
+      {!hasData ? (
+        <p className="text-[11px] text-mute">
+          Need at least 3 closed trades before the bot can adapt. Until then it uses the
+          user&apos;s exact settings without biasing.
+        </p>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded border border-line bg-ink-900 p-2">
+            <p className="font-mono text-[10px] uppercase text-mute">win rate</p>
+            <p className="mt-1 font-mono text-sm">{(snap.winRate * 100).toFixed(0)}%</p>
+            <p className="mt-1 text-[11px] text-mute">
+              Bot is sizing at <span className="text-zinc-200">{(snap.sizeFraction * 100).toFixed(0)}%</span> of the
+              per-coin cap right now.
+            </p>
+          </div>
+          <div className="rounded border border-line bg-ink-900 p-2">
+            <p className="font-mono text-[10px] uppercase text-mute">signal weights</p>
+            <ul className="mt-1 font-mono text-[11px] text-mute">
+              <li>momentum ×{snap.signalWeights.momentum.toFixed(2)}</li>
+              <li>age ×{snap.signalWeights.age.toFixed(2)}</li>
+              <li>curve ×{snap.signalWeights.curve.toFixed(2)}</li>
+              <li>holders ×{snap.signalWeights.holders.toFixed(2)}</li>
+            </ul>
+          </div>
+          <div className="rounded border border-line bg-ink-900 p-2">
+            <p className="font-mono text-[10px] uppercase text-mute">narrative track record</p>
+            {top.length === 0 ? (
+              <p className="mt-1 text-[11px] text-mute">No repeats yet.</p>
+            ) : (
+              <ul className="mt-1 font-mono text-[11px] text-mute">
+                {top.map(([k, v]) => (
+                  <li key={k}>
+                    <span className="text-zinc-200">{k}</span> · {(v.rate * 100).toFixed(0)}% ({v.wins}W / {v.losses}L)
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+      {snap.drawdownAddPct !== 0 ? (
+        <p className="mt-2 text-[11px] text-mute">
+          {snap.drawdownAddPct > 0
+            ? `Adaptive: tightening drawdown by ${(snap.drawdownAddPct * 100).toFixed(0)}% while cold.`
+            : `Adaptive: loosening drawdown by ${Math.abs(snap.drawdownAddPct * 100).toFixed(0)}% while hot.`}
+        </p>
+      ) : null}
+    </section>
   );
 }
 
