@@ -15,6 +15,7 @@ import { PUBLIC_RPC_WARNING } from "@/lib/constants";
 import { BOT_SESSION_KEY } from "@/lib/constants";
 import { safeReadScoped, removeScoped } from "@/lib/accounts";
 import { SUPPORTED_MOBILE_WALLETS, deepLinkOpen, openUniversal } from "@/lib/mobile";
+import { useWalletHoldings } from "./useWalletHoldings";
 
 const NAV = [
   { href: "/", label: "Markets" },
@@ -34,6 +35,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [solErr, setSolErr] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const [botModalOpen, setBotModalOpen] = useState(false);
+  const { holdings } = useWalletHoldings();
   type BotSessionInfo = {
     startedAt: number;
     durationHours: number;
@@ -219,12 +221,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </span>
             ) : null}
             {publicKey ? (
-              <span className="shrink-0 font-mono text-xs text-mute">
+              <span
+                className="shrink-0 font-mono text-xs text-mute"
+                title={
+                  holdings.length > 0
+                    ? `${holdings.length} SPL token${holdings.length === 1 ? "" : "s"} in this wallet`
+                    : "Wallet SPL tokens will load once connected"
+                }
+              >
                 {solErr
                   ? "RPC err"
                   : sol == null
                     ? "SOL …"
-                    : `${sol.toFixed(4)} SOL`}
+                    : `${sol.toFixed(4)} SOL${holdings.length > 0 ? ` · ${holdings.length} SPL` : ""}`}
               </span>
             ) : null}
             {mounted ? (

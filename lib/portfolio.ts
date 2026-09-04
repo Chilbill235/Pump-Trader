@@ -22,29 +22,52 @@ type ParsedAccountInfo = {
   };
 };
 
+const PUBLIC_RPCS = [
+  "https://api.mainnet-beta.solana.com",
+  "https://solana-rpc.publicnode.com",
+  "https://rpc.ankr.com/solana",
+];
+
 export async function loadWalletTokens(
   connection: Connection,
   owner: PublicKey,
 ): Promise<WalletToken[]> {
-  const resp = await connection.getParsedTokenAccountsByOwner(owner, {
-    programId: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
-  });
-  const out: WalletToken[] = [];
-  for (const acc of resp.value) {
-    const info = (acc.account.data as ParsedAccountInfo | undefined)?.parsed?.info;
-    if (!info?.mint || !info.tokenAmount) continue;
-    const amount = Number(info.tokenAmount.amount ?? "0");
-    if (!Number.isFinite(amount) || amount <= 0) continue;
-    out.push({
-      mint: info.mint,
-      amount,
-      decimals: info.tokenAmount.decimals ?? 0,
-      uiAmount:
-        info.tokenAmount.uiAmount ??
-        Number(info.tokenAmount.uiAmountString ?? amount / 10 ** (info.tokenAmount.decimals ?? 0)),
-    });
+  const tried = new Set<string>();
+  const primary = connection.rpcEndpoint;
+  const endpoints = [primary, ...PUBLIC_RPCS.filter((u) => u !== primary)];
+  let lastErr: unknown = null;
+  for (const url of endpoints) {
+    if (tried.has(url)) continue;
+    tried.add(url);
+    const conn = url === primary ? connection : new Connection(url, "confirmed");
+    try {
+      const resp = await conn.getParsedTokenAccountsByOwner(owner, {
+        programId: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
+      });
+      const out: WalletToken[] = [];
+      for (const acc of resp.value) {
+        const info = (acc.account.data as ParsedAccountInfo | undefined)?.parsed?.info;
+        if (!info?.mint || !info.tokenAmount) continue;
+        const amount = Number(info.tokenAmount.amount ?? "0");
+        if (!Number.isFinite(amount) || amount <= 0) continue;
+        out.push({
+          mint: info.mint,
+          amount,
+          decimals: info.tokenAmount.decimals ?? 0,
+          uiAmount:
+            info.tokenAmount.uiAmount ??
+            Number(info.tokenAmount.uiAmountString ?? amount / 10 ** (info.tokenAmount.decimals ?? 0)),
+        });
+      }
+      if (out.length > 0 || tried.size === endpoints.length) return out;
+      // got 0 results without error — don't bother trying other RPCs
+    } catch (err) {
+      lastErr = err;
+      // try next endpoint
+    }
   }
-  return out;
+  if (lastErr) throw lastErr;
+  return [];
 }
 
 const META_CACHE = new Map<string, { name: string; symbol: string; imageUri?: string }>();

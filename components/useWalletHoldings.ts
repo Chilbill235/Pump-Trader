@@ -45,7 +45,7 @@ export function useWalletHoldings() {
         const list = await loadWalletPortfolio(
           connection,
           wallet.publicKey!,
-          async (_mint) => null,
+          async () => null,
         );
         if (cancelled) return;
         setHoldings(

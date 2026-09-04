@@ -296,11 +296,37 @@ export function PositionsView() {
             </div>
           </header>
           {holdingsErr ? (
-            <p className="p-3 text-xs text-danger">{holdingsErr}</p>
+            <div className="p-3 text-xs text-danger">
+              <p>Could not load wallet tokens: {holdingsErr}</p>
+              <p className="mt-1 text-mute">
+                Public RPCs are rate-limited. Set a private RPC in Settings
+                (NEXT_PUBLIC_SOLANA_RPC_URL or Helius/QuickNet/Triton). Verify holdings on{" "}
+                <a
+                  className="underline"
+                  target="_blank"
+                  rel="noreferrer"
+                  href={`https://solscan.io/account/${publicKey!.toBase58()}#balances`}
+                >
+                  Solscan
+                </a>
+                .
+              </p>
+            </div>
           ) : holdings.length === 0 && !holdingsLoading ? (
-            <p className="p-6 text-center text-sm text-mute">
-              No SPL tokens found in this wallet.
-            </p>
+            <div className="space-y-2 p-6 text-center text-sm text-mute">
+              <p>No SPL tokens found in this wallet.</p>
+              <p className="font-mono text-[11px]">
+                Verify on{" "}
+                <a
+                  className="underline"
+                  target="_blank"
+                  rel="noreferrer"
+                  href={`https://solscan.io/account/${publicKey!.toBase58()}#balances`}
+                >
+                  Solscan
+                </a>
+              </p>
+            </div>
           ) : (
             <ul className="divide-y divide-line">
               {holdings.map((h) => (
