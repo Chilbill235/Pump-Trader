@@ -15,6 +15,7 @@ import {
   type AppSettings,
 } from "@/lib/settings";
 import { useActiveAccountId } from "./AccountsProvider";
+import { debouncedWrite } from "@/lib/storage";
 
 type Ctx = {
   settings: AppSettings;
@@ -44,7 +45,9 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       if (!accountId) return;
       setSettings((prev) => {
         const next = { ...prev, ...patch };
-        saveSettings(accountId, next);
+        // Settings writes are very frequent (every keystroke on number fields,
+        // every toggle). Debounce so we don't burn the localStorage CPU.
+        debouncedWrite(`pump-trader:acct:${accountId}:settings:v1`, next);
         return next;
       });
     },
@@ -65,4 +68,11 @@ export function useSettings(): Ctx {
   const ctx = useContext(SettingsContext);
   if (!ctx) throw new Error("useSettings must be used inside SettingsProvider");
   return ctx;
+}
+
+// On unload, also persist the current settings synchronously in case the
+// debounce timer is still pending.
+export function flushSettingsSave(accountId: string | null, current: AppSettings) {
+  if (!accountId) return;
+  saveSettings(accountId, current);
 }

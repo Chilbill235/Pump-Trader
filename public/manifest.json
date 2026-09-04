@@ -1,0 +1,48 @@
+{
+  "name": "Pump Trader",
+  "short_name": "PumpTrader",
+  "description": "Personal pump.fun buy/sell dashboard with auto-trade bot, multi-account, and live wallet data.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#05060a",
+  "theme_color": "#05060a",
+  "categories": ["finance", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Markets",
+      "url": "/",
+      "description": "Browse trending and newest pump.fun launches"
+    },
+    {
+      "name": "Watch",
+      "url": "/watch",
+      "description": "Watch the launch stream and run the bot"
+    },
+    {
+      "name": "Positions",
+      "url": "/positions",
+      "description": "See on-wallet holdings and open positions"
+    },
+    {
+      "name": "Wallet",
+      "url": "/wallet",
+      "description": "View balances, recent activity, and accounts"
+    }
+  ]
+}

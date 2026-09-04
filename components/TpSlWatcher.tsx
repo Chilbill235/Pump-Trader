@@ -14,6 +14,7 @@ import type { AppAlert, Position } from "@/lib/types";
 import { useSettings } from "./SettingsProvider";
 import { useActiveAccountId } from "./AccountsProvider";
 import { useWalletData } from "./WalletDataProvider";
+import { notify } from "./NotificationProvider";
 
 function loadAlerts(accountId: string | null): AppAlert[] {
   if (!accountId) return [];
@@ -176,8 +177,42 @@ export function TpSlWatcher() {
         const next = [alert, ...loadAlerts(accountId)];
         saveAlerts(accountId, next);
         if (!cancelled) setBanner(alert);
+        notify({
+          level: kind === "take-profit" ? "success" : "warn",
+          category: "position",
+          title: `${p.symbol} ${kind === "take-profit" ? "take-profit" : "stop-loss"} hit`,
+          body: `${pnl.toFixed(2)}% · ${
+            autoSold
+              ? autoSellPaper
+                ? "paper auto-sell recorded"
+                : "auto-sell submitted"
+              : settings.autoSell
+                ? "auto-sell failed"
+                : "auto-sell is OFF"
+          }`,
+          key: `tpsl:${p.mint}:${kind}:${pnlBucket}`,
+          href: "/positions",
+          actions: autoSold
+            ? [
+                { id: "view", label: "View", href: "/positions", tone: "primary" },
+              ]
+            : [
+                { id: "view", label: "View", href: "/positions", tone: "default" },
+                { id: "sell-now", label: "Sell now", href: `/coin/${p.mint}`, tone: "primary" },
+              ],
+          push: true,
+          persistent: true,
+        });
         if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-          new Notification("Pump trader alert", { body: alert.message });
+          try {
+            new Notification(`${p.symbol} ${kind === "take-profit" ? "TP" : "SL"} hit`, {
+              body: `${pnl.toFixed(1)}% ${autoSold ? "· auto-sell submitted" : ""}`,
+              tag: `tpsl:${p.mint}:${kind}`,
+              icon: "/icons/icon-192.svg",
+            });
+          } catch {
+            // ignore
+          }
         }
       } catch (err) {
         console.error("[TpSlWatcher] checkOne error:", err);

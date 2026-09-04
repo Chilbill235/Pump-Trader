@@ -31,6 +31,7 @@ import {
 } from "@/lib/jupiter";
 import { fetchMintDecimals, getSolUsd } from "@/lib/token-value";
 import { useWalletData } from "./WalletDataProvider";
+import { notify } from "./NotificationProvider";
 import type { WalletToken } from "@/lib/portfolio";
 
 type HoldingLike = WalletToken & {
@@ -682,6 +683,28 @@ export function QuickTradePanel(props: Props) {
       // page reflect the fill immediately. The WebSocket subscription will
       // also fire on-chain; this is just an immediate UI nudge.
       walletData.refresh();
+      const notifLevel = result.receipt.paper ? "info" : "success";
+      notify({
+        level: notifLevel,
+        category: "trade",
+        title: result.receipt.paper
+          ? `Paper ${side} recorded`
+          : `Confirmed ${side} on mainnet`,
+        body: `${amount} ${inSymbol} → ${tokensToUi(new BN(result.receipt.tokenAmountRaw), outDecimals)} ${symbol}`,
+        key: `trade:${props.mint}:${result.receipt.signature ?? result.receipt.solLamports}`,
+        href: "/positions",
+        actions: [
+          {
+            id: "view",
+            label: "View positions",
+            href: "/positions",
+            handler: "open-positions",
+            tone: "default",
+          },
+        ],
+        push: true,
+        persistent: !result.receipt.paper,
+      });
       if (result.receipt.paper) {
         setReceipt({ note: "Paper fill — no transaction sent. Recorded locally for tracking." });
       } else if (result.receipt.signature) {

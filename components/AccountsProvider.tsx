@@ -21,7 +21,6 @@ import {
   unlockAccount,
   type AccountSummary,
 } from "@/lib/accounts";
-
 type AccountsContext = {
   ready: boolean;
   capable: boolean;
@@ -49,6 +48,11 @@ export function AccountsProvider({ children }: { children: ReactNode }) {
     setActiveId(getActiveAccountId());
     setHydrated(true);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.dispatchEvent(new CustomEvent("pump-trader:account", { detail: { id: activeId } }));
+  }, [activeId]);
 
   const refresh = useCallback(() => {
     setAccounts(listAccounts());

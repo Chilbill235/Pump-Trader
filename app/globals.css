@@ -177,3 +177,9 @@ body[data-in-app-browser="1"] header {
   }
   h1 { line-height: 1.2; }
 }
+
+/* PWA splash/standalone adjustments. */
+@media all and (display-mode: standalone) {
+  /* Hide the address bar offset if the browser draws its own. */
+  body { padding-top: env(safe-area-inset-top); }
+}
