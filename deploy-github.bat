@@ -140,11 +140,13 @@ REM --- Push. ---
 set "PUSH_RC=0"
 if defined GH_TOKEN (
   for /f "delims=" %%R in ('git remote get-url %REMOTE_NAME%') do set "REMOTE_URL=%%R"
-  call set "AUTH_URL=%%REMOTE_URL:https://=https://%GH_TOKEN%@%%"
+  REM Build the auth URL with delayed expansion so GH_TOKEN is not parsed
+  REM as a batch parameter (which would explode on `%` characters).
+  set "AUTH_URL=!REMOTE_URL:https://=https://%GH_TOKEN%@!"
   echo === git push (token) %REMOTE_NAME% %BRANCH_NAME% ===
   git push "!AUTH_URL!" "%BRANCH_NAME%"
   set "PUSH_RC=%ERRORLEVEL%"
-  set "AUTH_URL=%REMOTE_URL%"
+  set "AUTH_URL="
 ) else (
   echo === git push %REMOTE_NAME% %BRANCH_NAME% ===
   git push "%REMOTE_NAME%" "%BRANCH_NAME%"
