@@ -180,7 +180,7 @@ export function CoinView({ mint }: { mint: string }) {
             <button
               type="button"
               onClick={() => setTradeOpen(true)}
-              className="mt-4 w-full rounded bg-neon px-4 py-3 font-mono text-sm font-semibold text-ink-950 active:bg-neon/80 lg:hidden"
+              className="mt-4 w-full rounded bg-neon px-4 py-3 font-mono text-sm font-semibold text-ink-950 transition-colors hover:bg-neon/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-neon active:bg-neon/80 lg:hidden"
             >
               Buy / Sell
             </button>

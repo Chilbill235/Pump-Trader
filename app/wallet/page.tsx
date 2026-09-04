@@ -3,18 +3,19 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { PublicKey } from "@solana/web3.js";
 import BN from "bn.js";
 import { CoinImage } from "@/components/CoinImage";
 import { CopyButton } from "@/components/CopyButton";
 import { useSettings } from "@/components/SettingsProvider";
 import { useActiveAccountId } from "@/components/AccountsProvider";
 import { useWalletData } from "@/components/WalletDataProvider";
-import { getBalanceWithFallback } from "@/lib/connection";
 import { loadWalletPortfolio } from "@/lib/portfolio";
 import { fetchJupiterUsdPrice, getKnownTokenMeta } from "@/lib/jupiter";
 import { quoteTokenToSol } from "@/lib/token-value";
-import { shortenAddress, tokensToUi } from "@/lib/format";
+import { compactNumber, shortenAddress, tokensToUi } from "@/lib/format";
+import { ConnectWalletButton } from "@/components/ConnectWalletButton";
+import { detectWallets } from "@/lib/wallet-detect";
+import { isMobileDevice } from "@/lib/mobile";
 import { notify } from "@/components/NotificationProvider";
 
 type Holding = {
@@ -31,21 +32,23 @@ type Holding = {
   isPumpCoin: boolean;
 };
 
+type SortKey = "value" | "amount" | "name";
+type FilterKey = "all" | "pump" | "jupiter";
+
 export default function WalletPage() {
   const { connection } = useConnection();
   const wallet = useWallet();
-  const { publicKey, connected } = wallet;
+  const { publicKey, connected, wallet: walletAdapter } = wallet;
   const walletData = useWalletData();
   const { settings } = useSettings();
   const accountId = useActiveAccountId();
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<"value" | "amount" | "symbol">("value");
-  const [filter, setFilter] = useState<"all" | "pump" | "jupiter">("all");
+  const [sortBy, setSortBy] = useState<SortKey>("value");
+  const [filter, setFilter] = useState<FilterKey>("all");
   const [search, setSearch] = useState("");
   const [hiddenDust, setHiddenDust] = useState(false);
-  const [copiedAddress, setCopiedAddress] = useState(false);
 
   useEffect(() => {
     if (!connected || !publicKey) {
@@ -123,7 +126,16 @@ export default function WalletPage() {
         if (cancelled) return;
         setHoldings(priced);
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!cancelled) {
+          setError(msg);
+          notify({
+            level: "danger",
+            category: "wallet",
+            title: "Could not load wallet tokens",
+            body: friendlyRpcError(msg),
+          });
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -155,188 +167,370 @@ export default function WalletPage() {
   const totals = useMemo(() => {
     let solValue = 0;
     let usd = 0;
+    let knownUsd = 0;
+    let knownCount = 0;
     for (const h of visible) {
       if (h.solValue != null) solValue += h.solValue;
-      if (h.usd != null) usd += h.usd;
+      if (h.usd != null) {
+        usd += h.usd;
+        knownUsd += h.usd;
+        knownCount += 1;
+      }
     }
-    return { solValue, usd };
+    return { solValue, usd, knownUsd, knownCount };
   }, [visible]);
 
-  async function copyAddress() {
-    if (!publicKey) return;
-    try {
-      await navigator.clipboard.writeText(publicKey.toBase58());
-      setCopiedAddress(true);
-      setTimeout(() => setCopiedAddress(false), 1500);
-    } catch {
-      // ignore
-    }
-  }
-
-  async function airdropCheck() {
-    if (!publicKey) return;
-    try {
-      const { lamports, endpoint } = await getBalanceWithFallback(connection, publicKey);
-      notify({
-        key: `balance:${publicKey.toBase58()}:${Math.floor(lamports / 1e7)}`,
-        level: "info",
-        category: "wallet",
-        title: "Balance refreshed",
-        body: `${(lamports / 1e9).toFixed(6)} SOL via ${new URL(endpoint).hostname}`,
-      });
-    } catch (err) {
-      notify({
-        level: "danger",
-        category: "wallet",
-        title: "Balance fetch failed",
-        body: err instanceof Error ? err.message : String(err),
-      });
-    }
-  }
-
   if (!connected) {
-    return (
-      <div className="grid min-h-[60vh] place-items-center">
-        <div className="max-w-md rounded border border-line bg-ink-800 p-6 text-center">
-          <p className="font-mono text-sm text-neon">Wallet</p>
-          <p className="mt-2 text-sm text-mute">Connect your wallet to see balances, holdings, and recent activity.</p>
-        </div>
-      </div>
-    );
+    return <ConnectScreen />;
   }
 
   return (
     <div className="space-y-4 pb-20">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-mono text-lg tracking-wide">Wallet</h1>
-          <p className="text-xs text-mute">
+          <p className="font-mono text-[11px] uppercase tracking-widest text-neon">Wallet</p>
+          <h1 className="mt-1 font-mono text-2xl tracking-wide">Your holdings</h1>
+          <p className="mt-1 text-xs text-mute">
             Live balances, every SPL token, USD value, and quick actions. Updates in real time via WebSocket.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={airdropCheck}
-            className="touch-target press rounded border border-line bg-ink-800 px-3 py-1.5 font-mono text-xs text-mute hover:border-neon hover:text-neon"
-          >
-            Refresh
-          </button>
+        <div className="flex items-center gap-2">
+          <ConnectWalletButton />
         </div>
       </header>
 
-      <section className="rounded border border-line bg-gradient-to-br from-ink-800 to-ink-900 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="font-mono text-[11px] uppercase tracking-wide text-mute">Total balance</p>
-            <p className="mt-1 font-mono text-3xl font-semibold">
-              {walletData.sol != null ? walletData.sol.toFixed(4) : "—"}
-              <span className="ml-1 text-base text-mute">SOL</span>
-              {walletData.live ? (
-                <span
-                  className="ml-3 inline-block h-2 w-2 rounded-full bg-neon live-pulse align-middle"
-                  title="WebSocket live"
-                />
-              ) : null}
-            </p>
-            <p className="mt-1 font-mono text-xs text-mute">
-              {walletData.solUsd != null && walletData.sol != null
-                ? `≈ $${(walletData.sol * walletData.solUsd).toFixed(2)} · SOL $${walletData.solUsd.toFixed(2)}`
-                : "…"}
-            </p>
-          </div>
-          <div className="flex flex-col items-end gap-1 text-right">
-            <button
-              type="button"
-              onClick={copyAddress}
-              className="press flex items-center gap-2 rounded border border-line bg-ink-800 px-3 py-1.5 font-mono text-xs text-mute hover:border-neon hover:text-neon"
-            >
-              {publicKey ? shortenAddress(publicKey.toBase58(), 6, 6) : "—"}
-              <span aria-hidden>{copiedAddress ? "✓" : "⧉"}</span>
-            </button>
-            <p className="font-mono text-[11px] text-mute">
-              via {walletData.endpoint ? new URL(walletData.endpoint).hostname : "…"}
-            </p>
-            <p className="font-mono text-[11px] text-mute">{holdings.length} SPL token{holdings.length === 1 ? "" : "s"}</p>
-          </div>
-        </div>
-        <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-          <Stat label="Native" value={walletData.sol != null ? `${walletData.sol.toFixed(4)} SOL` : "—"} />
-          <Stat
-            label="Tokens"
-            value={`${holdings.length}`}
-            sub={totals.solValue > 0 ? `≈ ${totals.solValue.toFixed(4)} SOL` : undefined}
-          />
-          <Stat
-            label="USD"
-            value={walletData.solUsd != null && walletData.sol != null ? `$${((walletData.sol + totals.solValue) * walletData.solUsd).toFixed(2)}` : "—"}
-          />
-        </div>
-      </section>
+      <BalanceCard
+        sol={walletData.sol}
+        solUsd={walletData.solUsd}
+        holdingsCount={holdings.length}
+        totals={totals}
+        live={walletData.live}
+        endpoint={walletData.endpoint}
+        address={publicKey?.toBase58() ?? ""}
+        walletName={walletAdapter?.adapter?.name ?? "Wallet"}
+        onRefresh={() => walletData.refresh()}
+        onNotifyError={() =>
+          notify({
+            level: "danger",
+            category: "wallet",
+            title: "Refresh failed",
+            body: error ?? "Unknown error",
+          })
+        }
+      />
 
-      <section className="rounded border border-line bg-ink-800">
-        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-3 py-2">
-          <h2 className="font-mono text-xs uppercase tracking-wide text-mute">Holdings</h2>
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search…"
-              className="rounded border border-line bg-ink-900 px-2 py-1 font-mono text-xs"
-            />
-            <select
-              value={filter}
-              onChange={(e) => setFilter(e.target.value as "all" | "pump" | "jupiter")}
-              className="rounded border border-line bg-ink-900 px-2 py-1 font-mono text-xs"
-            >
-              <option value="all">All venues</option>
-              <option value="pump">pump only</option>
-              <option value="jupiter">Jupiter only</option>
-            </select>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as "value" | "amount" | "symbol")}
-              className="rounded border border-line bg-ink-900 px-2 py-1 font-mono text-xs"
-            >
-              <option value="value">Sort: value</option>
-              <option value="amount">Sort: amount</option>
-              <option value="symbol">Sort: name</option>
-            </select>
-            <label className="flex items-center gap-1 font-mono text-[11px] text-mute">
-              <input
-                type="checkbox"
-                checked={hiddenDust}
-                onChange={(e) => setHiddenDust(e.target.checked)}
-                className="accent-neon"
-              />
-              hide &lt;$0.50
-            </label>
-          </div>
-        </header>
-        {error ? (
-          <p className="p-3 text-xs text-danger">{error}</p>
-        ) : loading && holdings.length === 0 ? (
-          <p className="p-6 text-center text-sm text-mute">Loading holdings…</p>
-        ) : visible.length === 0 ? (
-          <p className="p-6 text-center text-sm text-mute">
-            {holdings.length === 0 ? "No SPL tokens found in this wallet." : "Nothing matches the filter."}
-          </p>
-        ) : (
-          <ul className="divide-y divide-line">
-            {visible.map((h) => (
-              <HoldingRow key={h.mint} h={h} accountId={accountId} />
-            ))}
-          </ul>
-        )}
-      </section>
+      <HoldingsPanel
+        error={error}
+        loading={loading}
+        holdings={holdings}
+        visible={visible}
+        search={search}
+        setSearch={setSearch}
+        filter={filter}
+        setFilter={setFilter}
+        sortBy={sortBy}
+        setSortBy={setSortBy}
+        hiddenDust={hiddenDust}
+        setHiddenDust={setHiddenDust}
+        accountId={accountId}
+      />
     </div>
+  );
+}
+
+function ConnectScreen() {
+  const [mounted, setMounted] = useState(false);
+  const [wallets, setWallets] = useState<ReturnType<typeof detectWallets>>([]);
+  const isMobile = useMemo(() => (mounted ? isMobileDevice() : false), [mounted]);
+
+  useEffect(() => {
+    setMounted(true);
+    setWallets(detectWallets());
+  }, []);
+
+  const installed = wallets.filter((w) => w.installed);
+  const installable = wallets.filter((w) => !w.installed);
+
+  return (
+    <div className="grid min-h-[70vh] place-items-center px-2 pb-20">
+      <div className="w-full max-w-lg space-y-5 rounded-2xl border border-line bg-gradient-to-br from-ink-800 to-ink-900 p-6 shadow-2xl">
+        <div className="text-center">
+          <span className="inline-flex items-center gap-2 rounded-full border border-line bg-ink-900 px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-mute">
+            <span className="h-1.5 w-1.5 rounded-full bg-neon live-pulse" />
+            Local · Encrypted · No server
+          </span>
+          <h1 className="mt-3 font-mono text-2xl tracking-widest text-neon">CONNECT WALLET</h1>
+          <p className="mt-2 text-sm text-mute">
+            We never see your keys. Pick a wallet to start trading. Your bot, positions, and settings
+            stay on this device.
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-line bg-ink-900 p-4">
+          <div className="flex items-center justify-between">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-mute">Detected on this device</p>
+            <ConnectWalletButton />
+          </div>
+          {mounted && installed.length > 0 ? (
+            <ul className="mt-3 space-y-2">
+              {installed.map((w) => (
+                <li
+                  key={w.id}
+                  className="flex items-center justify-between rounded-lg border border-neon/30 bg-neon/5 px-3 py-2"
+                >
+                  <span className="flex items-center gap-2 text-sm">
+                    <span
+                      aria-hidden
+                      className="flex h-6 w-6 items-center justify-center rounded-full font-mono text-[10px] font-bold text-white"
+                      style={{
+                        background:
+                          w.id === "phantom"
+                            ? "#ab9ff2"
+                            : w.id === "solflare"
+                            ? "#ffa133"
+                            : w.id === "trust"
+                            ? "#3375bb"
+                            : "#0052ff",
+                      }}
+                    >
+                      {w.id === "phantom" ? "P" : w.id === "solflare" ? "S" : w.id === "trust" ? "T" : "C"}
+                    </span>
+                    <span>{w.name}</span>
+                  </span>
+                  <span className="rounded bg-neon/15 px-1.5 py-0.5 font-mono text-[10px] uppercase text-neon">
+                    {w.inApp ? "in-app" : "installed"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : mounted ? (
+            <p className="mt-3 rounded-lg border border-warn/30 bg-warn/5 px-3 py-2 text-xs text-warn">
+              No wallet detected on this browser. {isMobile ? "Open this URL inside your wallet's browser." : "Install one to continue."}
+            </p>
+          ) : null}
+        </div>
+
+        {mounted && installable.length > 0 ? (
+          <div className="rounded-xl border border-line bg-ink-900 p-4">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-mute">
+              {isMobile ? "Open in a wallet app" : "Install a wallet"}
+            </p>
+            <ul className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {installable.map((w) => (
+                <li key={w.id}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (w.deeplink) {
+                        window.location.href = w.deeplink;
+                      } else {
+                        window.open(w.installUrl, "_blank", "noopener,noreferrer");
+                      }
+                    }}
+                    className="press flex w-full items-center justify-between rounded-lg border border-line bg-ink-800 px-3 py-2 text-left hover:border-neon"
+                  >
+                    <span className="text-sm">{w.name}</span>
+                    <span className="font-mono text-[10px] uppercase text-mute">
+                      {w.deeplink ? "open" : "install"} ↗
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        <p className="text-center text-[11px] text-mute">
+          Not financial advice. Most pump.fun coins go to zero.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function BalanceCard(props: {
+  sol: number | null;
+  solUsd: number | null;
+  holdingsCount: number;
+  totals: { solValue: number; usd: number; knownUsd: number; knownCount: number };
+  live: boolean;
+  endpoint: string | null;
+  address: string;
+  walletName: string;
+  onRefresh: () => void;
+  onNotifyError: () => void;
+}) {
+  const totalUsd =
+    props.sol != null && props.solUsd != null
+      ? (props.sol + props.totals.solValue) * props.solUsd
+      : null;
+  const known = props.totals.knownUsd > 0 && props.totals.knownCount > 0;
+  const stale = props.totals.knownCount < props.holdingsCount;
+
+  return (
+    <section className="relative overflow-hidden rounded-2xl border border-line bg-gradient-to-br from-ink-800 via-ink-900 to-ink-950 p-5 shadow-2xl">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full opacity-30 blur-3xl"
+        style={{ background: "radial-gradient(circle, rgba(57,255,136,0.5), transparent 70%)" }}
+      />
+      <div className="relative flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-mute">Total balance</p>
+            {props.live ? (
+              <span className="inline-flex items-center gap-1 rounded bg-neon/10 px-1.5 py-0.5 font-mono text-[10px] text-neon">
+                <span className="h-1.5 w-1.5 rounded-full bg-neon live-pulse" />
+                live
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-2 font-mono text-4xl font-semibold tracking-tight">
+            {props.sol != null ? props.sol.toFixed(4) : "—"}
+            <span className="ml-2 text-base text-mute">SOL</span>
+          </p>
+          <p className="mt-1 font-mono text-sm text-mute">
+            {totalUsd != null ? `≈ $${totalUsd.toFixed(2)}` : "…"}
+            {props.solUsd != null ? <span className="ml-2 text-[11px] text-mute">· SOL ${props.solUsd.toFixed(2)}</span> : null}
+          </p>
+          {stale ? (
+            <p className="mt-1 font-mono text-[10px] text-warn">
+              {props.totals.knownCount}/{props.holdingsCount} priced
+            </p>
+          ) : null}
+        </div>
+        <div className="flex flex-col items-end gap-2">
+          <button
+            type="button"
+            onClick={props.onRefresh}
+            className="press rounded border border-line bg-ink-800 px-3 py-1.5 font-mono text-[11px] text-mute hover:border-neon hover:text-neon"
+            title="Refresh"
+          >
+            ↻ Refresh
+          </button>
+          <div className="flex items-center gap-1 font-mono text-[11px] text-mute">
+            <span className="truncate">{shortenAddress(props.address, 4, 4)}</span>
+            <CopyButton value={props.address} label="copy" />
+          </div>
+          <p className="font-mono text-[10px] text-mute">via {props.walletName}</p>
+          {props.endpoint ? (
+            <p className="font-mono text-[10px] text-mute">rpc {new URL(props.endpoint).hostname}</p>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="relative mt-4 grid grid-cols-3 gap-2">
+        <Stat label="SOL" value={props.sol != null ? `${props.sol.toFixed(4)}` : "—"} />
+        <Stat
+          label="Tokens"
+          value={`${props.holdingsCount}`}
+          sub={props.totals.solValue > 0 ? `≈ ${props.totals.solValue.toFixed(4)} SOL` : undefined}
+        />
+        <Stat
+          label="USD"
+          value={totalUsd != null ? `$${compactNumber(totalUsd)}` : "—"}
+          sub={known ? `${props.totals.knownCount} priced` : "pricing…"}
+        />
+      </div>
+    </section>
+  );
+}
+
+function HoldingsPanel(props: {
+  error: string | null;
+  loading: boolean;
+  holdings: Holding[];
+  visible: Holding[];
+  search: string;
+  setSearch: (v: string) => void;
+  filter: FilterKey;
+  setFilter: (v: FilterKey) => void;
+  sortBy: SortKey;
+  setSortBy: (v: SortKey) => void;
+  hiddenDust: boolean;
+  setHiddenDust: (v: boolean) => void;
+  accountId: string | null;
+}) {
+  return (
+    <section className="rounded-2xl border border-line bg-ink-800">
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
+        <div>
+          <h2 className="font-mono text-sm uppercase tracking-widest text-mute">Holdings</h2>
+          <p className="mt-0.5 font-mono text-[11px] text-mute">
+            {props.holdings.length} SPL token{props.holdings.length === 1 ? "" : "s"} · tap to trade
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="search"
+            value={props.search}
+            onChange={(e) => props.setSearch(e.target.value)}
+            placeholder="Search…"
+            className="w-32 rounded border border-line bg-ink-900 px-2 py-1 font-mono text-xs sm:w-40"
+          />
+          <select
+            value={props.filter}
+            onChange={(e) => props.setFilter(e.target.value as FilterKey)}
+            className="rounded border border-line bg-ink-900 px-2 py-1 font-mono text-xs"
+          >
+            <option value="all">All venues</option>
+            <option value="pump">pump only</option>
+            <option value="jupiter">Jupiter only</option>
+          </select>
+          <select
+            value={props.sortBy}
+            onChange={(e) => props.setSortBy(e.target.value as SortKey)}
+            className="rounded border border-line bg-ink-900 px-2 py-1 font-mono text-xs"
+          >
+            <option value="value">Sort: value</option>
+            <option value="amount">Sort: amount</option>
+            <option value="name">Sort: name</option>
+          </select>
+          <label className="flex items-center gap-1 font-mono text-[11px] text-mute">
+            <input
+              type="checkbox"
+              checked={props.hiddenDust}
+              onChange={(e) => props.setHiddenDust(e.target.checked)}
+              className="accent-neon"
+            />
+            hide &lt;$0.50
+          </label>
+        </div>
+      </header>
+      {props.error ? (
+        <div className="m-4 rounded-lg border border-danger/40 bg-danger/10 p-3 text-xs text-danger">
+          <p className="font-mono text-[10px] uppercase tracking-widest">Wallet load failed</p>
+          <p className="mt-1 break-words">{friendlyRpcError(props.error)}</p>
+          <Link
+            href="/settings"
+            className="press mt-2 inline-block rounded border border-danger/40 bg-danger/5 px-2 py-1 font-mono text-[11px] text-danger hover:bg-danger/15"
+          >
+            Open Settings →
+          </Link>
+        </div>
+      ) : props.loading && props.holdings.length === 0 ? (
+        <HoldingsSkeleton />
+      ) : props.visible.length === 0 ? (
+        <EmptyState hasHoldings={props.holdings.length > 0} />
+      ) : (
+        <ul className="divide-y divide-line">
+          {props.visible.map((h) => (
+            <HoldingRow key={h.mint} h={h} accountId={props.accountId} />
+          ))}
+        </ul>
+      )}
+      <footer className="border-t border-line/60 px-4 py-2 font-mono text-[10px] text-mute">
+        Pump.fun bonding-curve / pump-amm coins use the pump program. Everything else (USDC, BONK,
+        JUP, memecoins) routes through Jupiter using any token in your wallet with enough balance.
+        Trades under $1 USD are disabled.
+      </footer>
+    </section>
   );
 }
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded border border-line/40 bg-ink-900/60 p-2">
+    <div className="rounded-lg border border-line/40 bg-ink-900/60 p-2.5">
       <p className="font-mono text-[10px] uppercase tracking-wide text-mute">{label}</p>
       <p className="mt-0.5 font-mono text-sm">{value}</p>
       {sub ? <p className="font-mono text-[10px] text-mute">{sub}</p> : null}
@@ -344,57 +538,112 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
   );
 }
 
+function HoldingsSkeleton() {
+  return (
+    <ul className="divide-y divide-line">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <li key={i} className="flex items-center gap-3 px-4 py-3">
+          <div className="h-8 w-8 animate-pulse rounded-full bg-ink-700" />
+          <div className="flex-1 space-y-2">
+            <div className="h-3 w-1/3 animate-pulse rounded bg-ink-700" />
+            <div className="h-2 w-1/2 animate-pulse rounded bg-ink-700" />
+          </div>
+          <div className="h-4 w-16 animate-pulse rounded bg-ink-700" />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function EmptyState({ hasHoldings }: { hasHoldings: boolean }) {
+  return (
+    <div className="grid place-items-center px-6 py-12 text-center">
+      <div className="flex h-12 w-12 items-center justify-center rounded-full border border-line bg-ink-900 font-mono text-2xl text-mute">
+        ∅
+      </div>
+      <p className="mt-3 font-mono text-sm text-mute">
+        {hasHoldings ? "Nothing matches the filter." : "No SPL tokens in this wallet yet."}
+      </p>
+      <p className="mt-1 text-[11px] text-mute">
+        {hasHoldings ? "Try clearing filters above." : "Buy a coin from the Markets tab to get started."}
+      </p>
+    </div>
+  );
+}
+
 function HoldingRow({ h, accountId }: { h: Holding; accountId: string | null }) {
   const sym = h.symbol || shortenAddress(h.mint, 4, 4);
+  const tradeHref = `/coin/${h.mint}${accountId ? `?acct=${accountId}` : ""}`;
+  const tradable = (h.usd ?? 0) >= 1;
   return (
-    <li className="flex flex-wrap items-center gap-2 px-3 py-2 sm:flex-nowrap sm:gap-3">
-      <CoinImage src={h.imageUri ?? null} alt={sym} size={32} />
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-baseline gap-2">
-          <Link
-            href={`/coin/${h.mint}`}
-            className="truncate font-medium hover:text-neon"
-          >
-            {h.name}
-          </Link>
-          <span className="font-mono text-xs text-mute">{sym}</span>
-          <span className="font-mono text-[11px] text-mute">
-            {tokensToUi(new BN(Math.round(h.amount)), h.decimals)} {sym}
-          </span>
+    <li className="group">
+      <Link
+        href={tradable ? tradeHref : "#"}
+        aria-disabled={!tradable}
+        onClick={(e) => {
+          if (!tradable) e.preventDefault();
+        }}
+        className={`press flex flex-wrap items-center gap-2 px-4 py-3 sm:flex-nowrap sm:gap-3 ${
+          tradable ? "hover:bg-ink-700/50" : "opacity-60"
+        }`}
+      >
+        <CoinImage src={h.imageUri ?? null} alt={sym} size={32} />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-baseline gap-2">
+            <span className="truncate font-medium group-hover:text-neon">{h.name}</span>
+            <span className="font-mono text-xs text-mute">{sym}</span>
+            <span className="font-mono text-[11px] text-mute">
+              {tokensToUi(new BN(Math.round(h.amount)), h.decimals)} {sym}
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 font-mono text-[11px] text-mute">
+            {shortenAddress(h.mint, 6, 6)}
+            <CopyButton value={h.mint} label="copy" />
+            {h.source === "unknown" ? (
+              <span className="rounded bg-warn/10 px-1 py-0.5 text-[10px] text-warn">no meta</span>
+            ) : null}
+            {h.isPumpCoin ? (
+              <span className="rounded bg-neon/10 px-1 py-0.5 text-[10px] text-neon">pump</span>
+            ) : (
+              <span className="rounded bg-ink-700 px-1 py-0.5 text-[10px] text-mute">jupiter</span>
+            )}
+            {!tradable ? (
+              <span className="rounded bg-warn/10 px-1 py-0.5 text-[10px] text-warn">min $1 to trade</span>
+            ) : null}
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2 font-mono text-[11px] text-mute">
-          {shortenAddress(h.mint, 6, 6)}
-          <CopyButton value={h.mint} label="copy" />
-          {h.source === "unknown" ? (
-            <span className="rounded bg-warn/10 px-1 py-0.5 text-[10px] text-warn">no meta</span>
-          ) : null}
-          {h.isPumpCoin ? (
-            <span className="rounded bg-neon/10 px-1 py-0.5 text-[10px] text-neon">pump</span>
+        <div className="text-right font-mono text-xs">
+          {h.usd != null ? (
+            <p>
+              ${h.usd.toFixed(2)}
+              {h.solValue != null ? (
+                <span className="block text-[11px] text-mute">{h.solValue.toFixed(4)} SOL</span>
+              ) : null}
+            </p>
           ) : (
-            <span className="rounded bg-ink-700 px-1 py-0.5 text-[10px] text-mute">jupiter</span>
+            <span className="text-mute">no price</span>
           )}
         </div>
-      </div>
-      <div className="text-right font-mono text-xs">
-        {h.usd != null ? (
-          <p>
-            ${h.usd.toFixed(2)}
-            {h.solValue != null ? (
-              <span className="block text-[11px] text-mute">{h.solValue.toFixed(4)} SOL</span>
-            ) : null}
-          </p>
-        ) : (
-          <span className="text-mute">no price</span>
-        )}
-      </div>
-      <Link
-        href={`/coin/${h.mint}${accountId ? `?acct=${accountId}` : ""}`}
-        className="touch-target press shrink-0 rounded border border-line bg-ink-800 px-3 py-1.5 font-mono text-[11px] text-mute hover:border-neon hover:text-neon"
-      >
-        Trade
+        <span
+          className={`touch-target press shrink-0 rounded border px-3 py-1.5 font-mono text-[11px] ${
+            tradable
+              ? "border-line bg-ink-800 text-mute group-hover:border-neon group-hover:text-neon"
+              : "border-line/40 bg-ink-900 text-mute/60"
+          }`}
+        >
+          {tradable ? "Trade →" : "Trade"}
+        </span>
       </Link>
     </li>
   );
 }
 
-void PublicKey;
+function friendlyRpcError(msg: string): string {
+  if (/403|API key/i.test(msg)) {
+    return "Public RPCs are rate-limited. Set a private RPC in Settings (NEXT_PUBLIC_SOLANA_RPC_URL or Helius/QuickNet/Triton). Verify holdings on Solscan.";
+  }
+  if (/429|rate limit/i.test(msg)) {
+    return "RPC rate-limited. Add a private RPC in Settings or wait a minute.";
+  }
+  return msg.length > 200 ? msg.slice(0, 200) + "…" : msg;
+}

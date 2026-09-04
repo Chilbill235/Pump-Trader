@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 
 export function ConfirmDialog({
   open,
@@ -22,30 +22,48 @@ export function ConfirmDialog({
   onConfirm: () => void;
 }) {
   const cancelRef = useRef<HTMLButtonElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
 
   useEffect(() => {
     if (!open) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
-    cancelRef.current?.focus();
+    const focusTimer = window.setTimeout(() => cancelRef.current?.focus(), 0);
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
         onCancel();
+        return;
+      }
+      if (e.key === "Tab") {
+        const root = document.getElementById(titleId)?.closest("[role=dialog]") as HTMLElement | null;
+        if (!root) return;
+        const focusable = root.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        );
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
       }
     };
     document.addEventListener("keydown", handleKeyDown);
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
+      window.clearTimeout(focusTimer);
       document.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = prevOverflow;
-      previouslyFocused?.focus();
+      previouslyFocused?.focus?.();
     };
-  }, [open, onCancel]);
+  }, [open, onCancel, titleId]);
 
   if (!open) return null;
-  const titleId = "confirm-dialog-title";
   return (
     <div
       className="fixed inset-0 z-[100] flex items-stretch justify-center overflow-hidden bg-black/80 sm:items-center sm:p-4"
@@ -55,7 +73,6 @@ export function ConfirmDialog({
       }}
     >
       <div
-        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -92,7 +109,7 @@ export function ConfirmDialog({
           <button
             ref={cancelRef}
             type="button"
-            className="order-2 w-full rounded border border-line px-4 py-2.5 text-base text-mute sm:order-1 sm:w-auto sm:px-3 sm:py-1.5 sm:text-sm"
+            className="order-2 w-full rounded border border-line px-4 py-2.5 text-base text-mute focus:outline-none focus-visible:ring-2 focus-visible:ring-neon sm:order-1 sm:w-auto sm:px-3 sm:py-1.5 sm:text-sm"
             onClick={onCancel}
             disabled={busy}
           >
@@ -100,7 +117,7 @@ export function ConfirmDialog({
           </button>
           <button
             type="button"
-            className={`order-1 w-full rounded px-4 py-3 text-base font-semibold sm:order-2 sm:w-auto sm:px-3 sm:py-1.5 sm:text-sm ${
+            className={`order-1 w-full rounded px-4 py-3 text-base font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-neon sm:order-2 sm:w-auto sm:px-3 sm:py-1.5 sm:text-sm ${
               danger ? "bg-danger text-white" : "bg-neon text-ink-950"
             }`}
             onClick={onConfirm}

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNotifications, type Notification, type NotificationAction } from "./NotificationProvider";
 import { useSettings } from "./SettingsProvider";
@@ -68,10 +69,11 @@ export function NotificationBell() {
   const { notifications, unread, markRead, markAllRead, clear, permission, requestPushPermission } =
     useNotifications();
   const [open, setOpen] = useState(false);
-  const [filter, setFilter] = useState<string>("all");
+  const [filter, setFilter] = useState<"all" | "unread" | "trade" | "bot" | "position" | "wallet" | "system">("all");
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const settings = useSettings();
   const accountId = useActiveAccountId();
+  const router = useRouter();
   void settings;
   void accountId;
 
@@ -97,18 +99,26 @@ export function NotificationBell() {
     return notifications.filter((n) => n.category === filter);
   }, [notifications, filter]);
 
+  function navigate(href: string) {
+    setOpen(false);
+    router.push(href);
+  }
+
   function runAction(a: NotificationAction) {
     if (a.handler === "stop-bot") {
       window.dispatchEvent(new CustomEvent("pump-trader:action", { detail: { type: "stop-bot" } }));
     } else if (a.handler === "open-positions") {
-      window.history.pushState({}, "", "/positions");
-      window.dispatchEvent(new PopStateEvent("popstate"));
+      navigate("/positions");
+      return;
     } else if (a.handler === "open-watch") {
-      window.history.pushState({}, "", "/watch");
-      window.dispatchEvent(new PopStateEvent("popstate"));
+      navigate("/watch");
+      return;
     } else if (a.handler === "open-wallet") {
-      window.history.pushState({}, "", "/wallet");
-      window.dispatchEvent(new PopStateEvent("popstate"));
+      navigate("/wallet");
+      return;
+    } else if (a.href) {
+      navigate(a.href);
+      return;
     }
     setOpen(false);
   }
@@ -208,11 +218,7 @@ export function NotificationBell() {
                       onAction={runAction}
                       onClick={() => {
                         markRead(n.id);
-                        if (n.href) {
-                          window.history.pushState({}, "", n.href);
-                          window.dispatchEvent(new PopStateEvent("popstate"));
-                          setOpen(false);
-                        }
+                        if (n.href) navigate(n.href);
                       }}
                     />
                   </li>
@@ -270,9 +276,9 @@ function timeAgo(ts: number): string {
 
 export function ToastBanner() {
   const { toast, dismissToast, markRead } = useNotifications();
+  const router = useRouter();
   useEffect(() => {
     if (!toast) return;
-    // Auto-mark as read when shown.
     markRead(toast.id);
   }, [toast, markRead]);
   if (!toast) return null;
@@ -293,10 +299,7 @@ export function ToastBanner() {
                     key={a.id}
                     action={a}
                     onRun={() => {
-                      if (a.href) {
-                        window.history.pushState({}, "", a.href);
-                        window.dispatchEvent(new PopStateEvent("popstate"));
-                      }
+                      if (a.href) router.push(a.href);
                       if (a.handler === "stop-bot") {
                         window.dispatchEvent(
                           new CustomEvent("pump-trader:action", { detail: { type: "stop-bot" } }),

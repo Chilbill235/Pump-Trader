@@ -1,8 +1,7 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { appendBotLog } from "@/lib/bot-log";
@@ -13,12 +12,12 @@ import { isPublicRpc } from "@/lib/settings";
 import { PUBLIC_RPC_WARNING } from "@/lib/constants";
 import { BOT_SESSION_KEY } from "@/lib/constants";
 import { safeReadScoped, removeScoped } from "@/lib/accounts";
-import { SUPPORTED_MOBILE_WALLETS, deepLinkOpen, openUniversal } from "@/lib/mobile";
 import { useWalletData } from "./WalletDataProvider";
 import { NotificationBell, ToastBanner } from "./NotificationCenter";
 import { notify } from "./NotificationProvider";
 import { useInstallPrompt } from "./useInstallPrompt";
 import { loadAccountProfile, saveAccountProfile } from "@/lib/profile";
+import { ConnectWalletButton } from "./ConnectWalletButton";
 
 const NAV = [
   { href: "/", label: "Markets" },
@@ -29,11 +28,11 @@ const NAV = [
 ];
 
 const BOTTOM_NAV = [
-  { href: "/", label: "Markets", icon: "📈" },
-  { href: "/watch", label: "Watch", icon: "👀" },
-  { href: "/wallet", label: "Wallet", icon: "💳" },
-  { href: "/positions", label: "Pos", icon: "💼" },
-  { href: "/bot", label: "Bot", icon: "🤖" },
+  { href: "/", label: "Markets", icon: "ðŸ“ˆ" },
+  { href: "/watch", label: "Watch", icon: "ðŸ‘€" },
+  { href: "/wallet", label: "Wallet", icon: "ðŸ’³" },
+  { href: "/positions", label: "Pos", icon: "ðŸ’¼" },
+  { href: "/bot", label: "Bot", icon: "ðŸ¤–" },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -44,7 +43,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { activeAccount, lock, accounts, switchTo, remove } = useAccounts();
   const walletData = useWalletData();
   const { sol, holdings, live, endpoint } = walletData;
-  const [mounted, setMounted] = useState(false);
   const [botModalOpen, setBotModalOpen] = useState(false);
   type BotSessionInfo = {
     startedAt: number;
@@ -55,11 +53,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [botSession, setBotSession] = useState<BotSessionInfo | null>(null);
   const [navOpen, setNavOpen] = useState(false);
   const [acctMenuOpen, setAcctMenuOpen] = useState(false);
-  const [showMobileConnect, setShowMobileConnect] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   useEffect(() => {
     if (!navOpen) return;
@@ -133,7 +126,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   // Safety: if the wallet disconnects while auto-trade is on, immediately
   // disable auto-trade / auto-sell. Without a connected wallet, the bot
-  // cannot sign transactions — leaving auto-trade on would just burn RPC
+  // cannot sign transactions â€” leaving auto-trade on would just burn RPC
   // and confuse the user.
   useEffect(() => {
     if (!connected && (settings.autoTrade || settings.autoSell || botSession)) {
@@ -155,7 +148,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             aria-label="Toggle menu"
             aria-expanded={navOpen}
           >
-            {navOpen ? "✕" : "☰"}
+            {navOpen ? "âœ•" : "â˜°"}
           </button>
           <Link href="/" className="shrink-0 font-mono text-sm tracking-widest text-neon press">
             PUMP TRADER
@@ -184,7 +177,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               );
             })}
           </nav>
-          <div className="ml-auto flex shrink-0 items-center gap-2 overflow-x-auto scroll-thin">
+          <div className="ml-auto flex shrink-0 items-center gap-1.5 overflow-x-auto scroll-thin sm:gap-2">
             {connected ? (
               botRunning ? (
                 <button
@@ -193,7 +186,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   className="touch-target press shrink-0 rounded border border-danger/60 bg-danger/10 px-2.5 py-1 font-mono text-[11px] text-danger hover:bg-danger/20"
                   title={`Started ${new Date(botSession!.startedAt).toLocaleTimeString()}`}
                 >
-                  STOP BOT
+                  <span className="sm:hidden">■</span>
+                  <span className="hidden sm:inline">STOP BOT</span>
                 </button>
               ) : (
                 <button
@@ -201,7 +195,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   onClick={() => setBotModalOpen(true)}
                   className="touch-target press shrink-0 rounded border border-neon/60 bg-neon/10 px-2.5 py-1 font-mono text-[11px] text-neon hover:bg-neon/20"
                 >
-                  START BOT
+                  <span className="sm:hidden">▶</span>
+                  <span className="hidden sm:inline">START BOT</span>
                 </button>
               )
             ) : null}
@@ -212,7 +207,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   : "border-danger/40 bg-danger/10 text-danger"
               }`}
             >
-              {settings.simulateMode ? "SIMULATE" : "LIVE MAINNET"}
+              {settings.simulateMode ? "SIM" : "LIVE"}
             </span>
             {botRunning ? (
               <span className="live-pulse hidden shrink-0 rounded border border-neon/40 bg-neon/10 px-2 py-0.5 font-mono text-[11px] text-neon sm:inline">
@@ -226,7 +221,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {publicKey ? (
               <Link
                 href="/wallet"
-                className="shrink-0 font-mono text-xs text-mute hover:text-neon"
+                className="hidden shrink-0 font-mono text-xs text-mute hover:text-neon sm:inline-block"
                 title={
                   endpoint
                     ? `via ${endpoint}${live ? " · live" : " · polled"}`
@@ -242,19 +237,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </Link>
             ) : null}
             <NotificationBell />
-            {mounted ? (
-              <div className="shrink-0" suppressHydrationWarning>
-                <WalletMultiButton />
-              </div>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => setShowMobileConnect(true)}
-              className="touch-target press shrink-0 rounded border border-line bg-ink-800 px-2 py-1 font-mono text-[11px] text-mute hover:border-neon hover:text-neon sm:hidden"
-              title="Open in a wallet app"
-            >
-              Wallet ↗
-            </button>
+            <ConnectWalletButton />
             <AccountMenu
               open={acctMenuOpen}
               onToggle={() => setAcctMenuOpen((v) => !v)}
@@ -296,10 +279,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <ToastBanner />
 
       <StartBotModal open={botModalOpen} onClose={() => setBotModalOpen(false)} />
-
-      {showMobileConnect ? (
-        <MobileConnectSheet onClose={() => setShowMobileConnect(false)} />
-      ) : null}
     </div>
   );
 }
@@ -352,22 +331,22 @@ function AccountMenu(props: {
   );
   const accent = profile?.color ?? "#39ff88";
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const { onClose } = props;
   useEffect(() => {
     if (!props.open) return;
     const onPointer = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) props.onClose();
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) onClose();
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") props.onClose();
+      if (e.key === "Escape") onClose();
     };
-    // Use pointerdown so we react before any click handler below us.
     document.addEventListener("pointerdown", onPointer);
     document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("pointerdown", onPointer);
       document.removeEventListener("keydown", onKey);
     };
-  }, [props]);
+  }, [props.open, onClose]);
   if (!activeAccount) return null;
   return (
     <div ref={wrapRef} className="relative">
@@ -388,7 +367,7 @@ function AccountMenu(props: {
           style={{ backgroundColor: accent, boxShadow: `0 0 8px ${accent}` }}
         />
         <span className="max-w-[10ch] truncate">{activeAccount.username}</span>
-        <span aria-hidden className="text-[10px]">▾</span>
+        <span aria-hidden className="text-[10px]">â–¾</span>
       </button>
       {props.open ? (
         <div
@@ -427,7 +406,7 @@ function AccountMenu(props: {
                         onClick={() => props.onRemove(a.id)}
                         title="Delete account"
                       >
-                        ✕
+                        âœ•
                       </button>
                     </li>
                   ))}
@@ -439,14 +418,14 @@ function AccountMenu(props: {
             onClick={props.onLock}
             className="press w-full rounded border border-danger/40 bg-danger/5 px-3 py-1.5 text-left font-mono text-xs text-danger hover:bg-danger/10"
           >
-            🔒 Lock account
+            ðŸ”’ Lock account
           </button>
           <Link
             href="/settings"
             onClick={props.onClose}
             className="press mt-1 block w-full rounded border border-line bg-ink-900 px-3 py-1.5 text-left font-mono text-xs text-mute hover:border-neon hover:text-neon"
           >
-            ⚙ Settings
+            âš™ Settings
           </Link>
           {install.canInstall ? (
             <button
@@ -454,13 +433,13 @@ function AccountMenu(props: {
               onClick={() => void install.install()}
               className="press mt-1 w-full rounded border border-neon/40 bg-neon/5 px-3 py-1.5 text-left font-mono text-xs text-neon hover:bg-neon/15"
             >
-              📲 Install app
+              ðŸ“² Install app
             </button>
           ) : null}
           <ProfileEditor activeId={props.activeId} />
 
           <p className="mt-2 px-1 text-[11px] text-mute">
-            Locking signs you out of this device. All data stays here — it is just hidden until you
+            Locking signs you out of this device. All data stays here â€” it is just hidden until you
             enter your PIN again.
           </p>
         </div>
@@ -529,7 +508,7 @@ function ProfileEditor({ activeId }: { activeId: string | null }) {
           maxLength={120}
           rows={2}
           className="mt-1 w-full rounded border border-line bg-ink-800 px-2 py-1 font-mono text-xs"
-          placeholder="Trading style, focus, or notes…"
+          placeholder="Trading style, focus, or notesâ€¦"
         />
         <p className="mt-0.5 text-[10px] text-mute">{bio.length}/120</p>
       </label>
@@ -544,110 +523,3 @@ function ProfileEditor({ activeId }: { activeId: string | null }) {
   );
 }
 
-function MobileConnectSheet(props: { onClose: () => void }) {
-  const [copied, setCopied] = useState(false);
-  const wrapRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const onClick = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) props.onClose();
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") props.onClose();
-    };
-    document.addEventListener("mousedown", onClick);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onClick);
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prevOverflow;
-    };
-  }, [props]);
-  const url = typeof window !== "undefined" ? window.location.href : "";
-  return (
-    <div
-      ref={wrapRef}
-      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/80 sm:items-center sm:p-4"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) props.onClose();
-      }}
-    >
-      <div
-        className="flex w-full max-w-md flex-col rounded-t-2xl border border-line bg-ink-900 shadow-2xl sm:rounded-2xl"
-        style={{
-          maxHeight:
-            "calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom))",
-        }}
-      >
-        <div
-          className="flex shrink-0 items-center justify-between border-b border-line/60 px-4 py-3"
-          style={{ paddingTop: "calc(0.75rem + env(safe-area-inset-top))" }}
-        >
-          <h2 className="font-mono text-sm text-neon">Connect on mobile</h2>
-          <button
-            type="button"
-            onClick={props.onClose}
-            className="rounded border border-line px-2 py-1 font-mono text-xs text-mute"
-            aria-label="Close"
-          >
-            ✕
-          </button>
-        </div>
-        <div
-          className="min-h-0 flex-1 overflow-y-auto p-4 scroll-thin"
-          style={{ WebkitOverflowScrolling: "touch" }}
-        >
-          <p className="text-xs text-mute">
-            Pick a wallet. The page will open inside the wallet&apos;s browser with the
-            connection already prepared.
-          </p>
-          <div className="mt-3 space-y-2">
-            {SUPPORTED_MOBILE_WALLETS.map((w) => (
-              <button
-                key={w}
-                type="button"
-                onClick={() => openUniversal(deepLinkOpen(w))}
-                className="flex w-full items-center justify-between rounded border border-line bg-ink-800 px-4 py-3 text-left text-base active:border-neon"
-              >
-                <span className="font-mono">Open in {w}</span>
-                <span className="font-mono text-sm text-mute">↗</span>
-              </button>
-            ))}
-          </div>
-          <div className="mt-4 rounded border border-line bg-ink-800 p-3">
-            <p className="font-mono text-[11px] uppercase text-mute">URL</p>
-            <p className="mt-1 break-all font-mono text-xs">{url}</p>
-            <button
-              type="button"
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(url);
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 1500);
-                } catch {
-                  // ignore
-                }
-              }}
-              className="mt-2 rounded border border-line px-3 py-1.5 font-mono text-xs text-mute"
-            >
-              {copied ? "Copied" : "Copy URL"}
-            </button>
-          </div>
-        </div>
-        <div
-          className="shrink-0 border-t border-line/60 px-4 py-3"
-          style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
-        >
-          <button
-            type="button"
-            onClick={props.onClose}
-            className="w-full rounded border border-line py-2.5 font-mono text-sm text-mute"
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}

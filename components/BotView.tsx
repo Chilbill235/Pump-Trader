@@ -386,7 +386,9 @@ export function BotView() {
               ? `≈ $${(stats.equitySol * solUsd).toFixed(2)} · SOL $${solUsd.toFixed(2)}`
               : bankrollSol != null
                 ? `${bankrollSol.toFixed(4)} SOL bankroll`
-                : undefined
+                : walletOk
+                  ? "loading…"
+                  : "connect wallet to load"
           }
           tone={stats.equitySol >= (getStartBankroll(accountId) || 0) ? "neon" : "danger"}
         />
@@ -403,7 +405,11 @@ export function BotView() {
               ? `${(stats.winRate * 100).toFixed(0)}% (${stats.wins}W / ${stats.losses}L)`
               : "—"
           }
-          sub={`avg win ${stats.avgWinSol.toFixed(3)} SOL · avg loss ${stats.avgLossSol.toFixed(3)} SOL`}
+          sub={
+            stats.closed > 0
+              ? `avg win ${stats.avgWinSol.toFixed(3)} SOL · avg loss ${stats.avgLossSol.toFixed(3)} SOL`
+              : "no closed trades yet"
+          }
           tone={stats.winRate >= 0.5 && stats.closed > 4 ? "neon" : stats.closed > 0 ? "warn" : "mute"}
         />
       </div>

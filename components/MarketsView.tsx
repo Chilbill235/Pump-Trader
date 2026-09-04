@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { PumpCoin } from "@/lib/types";
 import { compactNumber, formatUsd, shortenAddress, timeAgo } from "@/lib/format";
@@ -23,6 +24,7 @@ export function MarketsView() {
   const [activeMint, setActiveMint] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const { holdings } = useWalletData();
+  const router = useRouter();
 
   useEffect(() => {
     const update = () => setIsMobile(isMobileDevice());
@@ -61,14 +63,14 @@ export function MarketsView() {
   }, []);
 
   useEffect(() => {
-    void load(kind, "");
-  }, [kind, load]);
+    void load(kind, q);
+  }, [kind, load, q]);
 
   function onSearch(e: React.FormEvent) {
     e.preventDefault();
     const term = q.trim();
     if (/^[1-9A-HJ-NP-Za-kmz2-9]{32,44}$/.test(term)) {
-      setActiveMint(term);
+      router.push(`/coin/${term}`);
       return;
     }
     void load(kind, term);

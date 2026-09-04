@@ -235,7 +235,7 @@ export function PositionsView() {
             ) : null}
           </span>
           {connected ? (
-            <span className="text-mute">{shortenAddress(publicKey!.toBase58(), 6, 6)}</span>
+            <span className="text-mute">{publicKey ? shortenAddress(publicKey.toBase58(), 6, 6) : "—"}</span>
           ) : null}
         </div>
         {connected && (holdings.length > 0 || totalSol > 0) && solUsd != null ? (
@@ -275,14 +275,18 @@ export function PositionsView() {
               <p className="mt-1 text-mute">
                 Public RPCs are rate-limited. Set a private RPC in Settings
                 (NEXT_PUBLIC_SOLANA_RPC_URL or Helius/QuickNet/Triton). Verify holdings on{" "}
-                <a
-                  className="underline"
-                  target="_blank"
-                  rel="noreferrer"
-                  href={`https://solscan.io/account/${publicKey!.toBase58()}#balances`}
-                >
-                  Solscan
-                </a>
+                {publicKey ? (
+                  <a
+                    className="underline"
+                    target="_blank"
+                    rel="noreferrer"
+                    href={`https://solscan.io/account/${publicKey.toBase58()}#balances`}
+                  >
+                    Solscan
+                  </a>
+                ) : (
+                  <span>Solscan</span>
+                )}
                 .
               </p>
             </div>
@@ -291,14 +295,18 @@ export function PositionsView() {
               <p>No SPL tokens found in this wallet.</p>
               <p className="font-mono text-[11px]">
                 Verify on{" "}
-                <a
-                  className="underline"
-                  target="_blank"
-                  rel="noreferrer"
-                  href={`https://solscan.io/account/${publicKey!.toBase58()}#balances`}
-                >
-                  Solscan
-                </a>
+                {publicKey ? (
+                  <a
+                    className="underline"
+                    target="_blank"
+                    rel="noreferrer"
+                    href={`https://solscan.io/account/${publicKey.toBase58()}#balances`}
+                  >
+                    Solscan
+                  </a>
+                ) : (
+                  <span>Solscan</span>
+                )}
               </p>
             </div>
           ) : (

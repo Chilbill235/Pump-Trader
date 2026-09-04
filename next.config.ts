@@ -8,8 +8,6 @@ const nextConfig: NextConfig = {
     "@solana/wallet-adapter-react",
     "@solana/wallet-adapter-react-ui",
     "@solana/wallet-adapter-wallets",
-    "@solana-mobile/wallet-adapter-mobile",
-    "@solana-mobile/wallet-standard-mobile",
     "@nirholas/pump-sdk",
   ],
   images: {

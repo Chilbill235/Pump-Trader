@@ -28,11 +28,6 @@ body {
 
 /* Tighter buttons / inputs on mobile so they fit the screen. */
 @media (max-width: 640px) {
-  .wallet-adapter-button {
-    height: 32px !important;
-    font-size: 11px !important;
-    padding: 0 10px !important;
-  }
   input[type="text"],
   input[type="number"],
   input[type="password"],
@@ -51,20 +46,10 @@ body {
   }
 }
 
-.wallet-adapter-button {
-  height: 34px !important;
-  font-size: 12px !important;
-  background: #141824 !important;
-  border: 1px solid #242a38 !important;
-  border-radius: 6px !important;
-}
-
-.wallet-adapter-button:hover {
-  background: #1c2230 !important;
-}
-
+/* Style the "show all wallets" modal launched from the connect button. */
 .wallet-adapter-modal-wrapper {
-  background: #0d1017 !important;
+  background: rgba(5, 6, 10, 0.85) !important;
+  backdrop-filter: blur(4px);
   align-items: flex-end !important;
   z-index: 9999 !important;
 }
@@ -79,6 +64,7 @@ body {
   border-radius: 12px 12px 0 0 !important;
   background: #0d1017 !important;
   color: #e8eaed !important;
+  border: 1px solid #242a38;
   max-height: 92vh !important;
   max-height: 92dvh !important;
 }
@@ -96,6 +82,9 @@ body {
 .wallet-adapter-modal-list li {
   background: #141824 !important;
   color: #e8eaed !important;
+  border: 1px solid #242a38 !important;
+  border-radius: 8px !important;
+  margin-bottom: 6px !important;
 }
 .wallet-adapter-modal-list li:hover {
   background: #1c2230 !important;
@@ -122,11 +111,6 @@ input[type="number"]::-webkit-inner-spin-button {
 .scroll-thin::-webkit-scrollbar-thumb {
   background: #242a38;
   border-radius: 99px;
-}
-
-/* In-app browser banner indicator (set by WalletProvider). */
-body[data-in-app-browser="1"] header {
-  border-bottom-color: rgba(57, 255, 136, 0.4);
 }
 
 /* Make the app shell container mobile-friendly by default. */
@@ -157,6 +141,27 @@ body[data-in-app-browser="1"] header {
   }
   .press:active {
     transform: scale(0.97);
+  }
+}
+
+/* Accessible focus rings on keyboard navigation without affecting mouse. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid #39ff88;
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  /* Don't double-up the ring on native controls we already style. */
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px #39ff88;
+  }
+  button:focus-visible,
+  a:focus-visible {
+    outline: 2px solid #39ff88;
+    outline-offset: 2px;
   }
 }
 

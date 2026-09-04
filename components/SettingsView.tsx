@@ -391,6 +391,10 @@ function NumberField(props: {
   step: number;
   onChange: (v: number) => void;
 }) {
+  const [draft, setDraft] = useState<string>(String(props.value));
+  useEffect(() => {
+    setDraft(String(props.value));
+  }, [props.value]);
   return (
     <label className="block space-y-1">
       <span className="font-mono text-[11px] uppercase text-mute">{props.label}</span>
@@ -398,20 +402,25 @@ function NumberField(props: {
         type="number"
         min={props.min}
         step={props.step}
-        value={props.value}
+        value={draft}
         onChange={(e) => {
           const raw = e.target.value;
-          if (raw === "" || raw === "-") {
-            props.onChange(props.min);
-            return;
-          }
+          setDraft(raw);
+          if (raw === "" || raw === "-" || raw === ".") return;
           const n = Number(raw);
           if (!Number.isFinite(n)) return;
-          props.onChange(n < props.min ? props.min : n);
+          if (n < props.min) return;
+          props.onChange(n);
         }}
-        onBlur={(e) => {
-          const n = Number(e.target.value);
-          if (Number.isFinite(n) && n < props.min) props.onChange(props.min);
+        onBlur={() => {
+          const n = Number(draft);
+          if (!Number.isFinite(n)) {
+            setDraft(String(props.value));
+            return;
+          }
+          const clamped = Math.max(props.min, n);
+          if (clamped !== n) setDraft(String(clamped));
+          props.onChange(clamped);
         }}
         className="w-full rounded border border-line bg-ink-800 px-3 py-2 font-mono text-sm"
       />
