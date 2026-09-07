@@ -41,6 +41,7 @@ import { loadPositions, pnlPct } from "@/lib/positions";
 import { quoteTokenToSol } from "@/lib/token-value";
 import { CoinImage } from "./CoinImage";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { notify } from "./NotificationProvider";
 import { useSettings } from "./SettingsProvider";
 import { useActiveAccountId } from "./AccountsProvider";
 import { useWalletData } from "./WalletDataProvider";
@@ -386,6 +387,32 @@ export function BotView() {
     saveBankrollConfig(accountId, next);
   }
 
+  function stopSession() {
+    if (!accountId || !session) return;
+    appendBotLog(accountId, { kind: "stop", message: "Bot stopped manually from the Bot page." });
+    try {
+      // Disable auto-trading for this account so the pipeline halts too.
+      const key = `pump-trader:acct:${accountId}:settings:v1`;
+      const raw = window.localStorage.getItem(key);
+      const parsed = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+      window.localStorage.setItem(
+        key,
+        JSON.stringify({ ...parsed, autoTrade: false, autoSell: false }),
+      );
+      removeScoped(accountId, BOT_SESSION_KEY);
+    } catch {
+      removeScoped(accountId, BOT_SESSION_KEY);
+    }
+    setSession(null);
+    notify({
+      level: "info",
+      category: "bot",
+      title: "Bot stopped",
+      body: "Auto-trading disabled. Open positions are kept.",
+    });
+    reload();
+  }
+
   const walletOk = wallet.connected;
   const sessionActive = !!session;
 
@@ -518,8 +545,9 @@ export function BotView() {
           />
         </div>
         <p className="text-[11px] text-mute">
-          When the bot is running, equity dropping below the floor, drawdown exceeding the cap, or
-          control TP/SL per position in the Positions view.
+          When the bot is running, the kill-switch stops it automatically if equity drops below the
+          floor, drawdown exceeds the cap, or session losses hit the limit. Control per-position
+          TP/SL in the Positions view.
         </p>
         </div>
       </section>
@@ -532,14 +560,40 @@ export function BotView() {
             aria-hidden
             className="pointer-events-none absolute -top-12 -right-12 h-32 w-32 rounded-full bg-info/10 blur-3xl"
           />
-          <div className="relative space-y-1 p-3 font-mono text-[11px]">
-            <p className="text-[10px] uppercase tracking-widest text-mute">SESSION</p>
-            <p className="text-white">
-              Started {new Date(session.startedAt).toLocaleString()} · {session.simulate ? "SIMULATE" : "LIVE"} ·{" "}
-              {session.maxTrades ?? "∞"} trades cap · {session.perCoinCapSol ?? "?"} SOL per coin · slippage{" "}
-              {session.slippage ?? "?"}% · TP {session.tpPct ?? "?"}% · SL {session.slPct ?? "?"}% · daily loss cap{" "}
-              {session.dailyLossSol ?? "?"} SOL
+          <div className="relative flex flex-wrap items-center justify-between gap-2 border-b border-line-soft bg-ink-850/60 px-3 py-2">
+            <p className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest text-mute">
+              <span
+                aria-hidden
+                className="inline-block h-2 w-2 animate-pulse rounded-full bg-neon shadow-[0_0_8px_rgba(57,255,136,0.8)]"
+              />
+              Session running ·{" "}
+              <span className="text-white">{humanizeAge(Date.now() - session.startedAt)}</span> ·{" "}
+              <span className={session.simulate ? "text-info" : "text-danger"}>
+                {session.simulate ? "SIMULATE" : "LIVE"}
+              </span>
             </p>
+            <button
+              type="button"
+              onClick={stopSession}
+              className="press rounded-md border border-danger/50 bg-danger/10 px-3 py-1.5 font-mono text-xs font-semibold text-danger hover:bg-danger/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger min-h-9"
+            >
+              ■ Stop bot
+            </button>
+          </div>
+          <div className="relative grid grid-cols-2 gap-2 p-3 font-mono text-[11px] sm:grid-cols-3 lg:grid-cols-6">
+            {[
+              { label: "Trades cap", value: String(session.maxTrades ?? "∞") },
+              { label: "Per coin", value: `${session.perCoinCapSol ?? "?"} SOL` },
+              { label: "Slippage", value: `${session.slippage ?? "?"}%` },
+              { label: "Take profit", value: `${session.tpPct ?? "?"}%` },
+              { label: "Stop loss", value: `${session.slPct ?? "?"}%` },
+              { label: "Daily loss cap", value: `${session.dailyLossSol ?? "?"} SOL` },
+            ].map((c) => (
+              <div key={c.label} className="rounded-md border border-line bg-ink-900/60 px-2 py-1.5">
+                <p className="text-[9px] uppercase tracking-widest text-mute">{c.label}</p>
+                <p className="truncate text-white">{c.value}</p>
+              </div>
+            ))}
           </div>
         </div>
       ) : null}
@@ -605,7 +659,7 @@ export function BotView() {
           </header>
           <ul className="max-h-72 divide-y divide-line-soft overflow-auto scroll-thin">
             {closedTrades.slice(0, 50).map((t, i) => (
-              <li key={`${t.mint}-${t.ts}-${i}`} className="flex items-baseline gap-3 px-3 py-2 text-xs transition-colors hover:bg-ink-850/40">
+              <li key={`${t.mint}-${t.ts}-${i}`} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-3 py-2 text-xs transition-colors hover:bg-ink-850/40">
                 <span className="font-mono text-[11px] text-mute">
                   {new Date(t.ts).toLocaleTimeString()}
                 </span>
@@ -614,7 +668,7 @@ export function BotView() {
                     ${t.symbol}
                   </Link>
                 </span>
-                <span className="font-mono text-[11px] text-mute">
+                <span className="hidden font-mono text-[11px] text-mute sm:inline">
                   in {t.solIn.toFixed(3)} · out {t.solOut.toFixed(3)} · {Math.round(t.holdingMinutes)}m
                 </span>
                 <span
@@ -666,7 +720,7 @@ export function BotView() {
                   <span className="font-mono text-[11px] text-mute">
                     {new Date(e.ts).toLocaleTimeString()}
                   </span>
-                  <span className="min-w-0 flex-1 truncate font-mono text-xs">
+                  <span className="min-w-0 flex-1 break-words font-mono text-xs">
                     {e.mint ? (
                       <Link href={`/coin/${e.mint}`} className="hover:text-neon">
                         {e.symbol ?? e.mint.slice(0, 6)}
