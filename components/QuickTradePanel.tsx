@@ -176,15 +176,15 @@ function classifyError(raw: string): ErrorHint {
       ],
     };
   }
-  if (lower.includes("failed to fetch") || lower.includes("networkerror")) {
+  if (lower.includes("failed to fetch") || lower.includes("networkerror") || lower.includes("all_jupiter_endpoints_failed")) {
     return {
-      title: "Network — could not reach Jupiter",
+      title: "Jupiter aggregator unreachable",
       detail: raw,
       fixes: [
-        "Could not reach Jupiter's quote/swap API. This is usually a network/CORS issue.",
-        "If running on localhost, try: npx next dev --experimental-https (then accept the self-signed cert).",
-        "Or switch to SIMULATE mode to trade without hitting live APIs.",
-        "Check your internet connection and retry.",
+        "Jupiter is unreachable from this network/Vercel region.",
+        "Use a VPN, or switch to SIMULATE mode to test without live quotes.",
+        "Same-mint swaps (USDC→USDC) still work offline.",
+        "For real cross-token swaps, try again later or from a different network.",
       ],
     };
   }
@@ -206,18 +206,6 @@ function classifyError(raw: string): ErrorHint {
         "Jupiter could not find a route for this pair right now.",
         "Try a different input token (SOL, USDC).",
         "Retry in a few seconds — routes update continuously.",
-      ],
-    };
-  }
-  if (lower.includes("failed to fetch") || lower.includes("networkerror")) {
-    return {
-      title: "Network — could not reach Jupiter",
-      detail: raw,
-      fixes: [
-        "Could not reach Jupiter's quote/swap API. This is usually a network/CORS issue.",
-        "If running on localhost, try: npx next dev --experimental-https (then accept the self-signed cert).",
-        "Or switch to SIMULATE mode to trade without hitting live APIs.",
-        "Check your internet connection and retry.",
       ],
     };
   }

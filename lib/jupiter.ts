@@ -29,10 +29,11 @@ import {
 import type { WalletContextState } from "@solana/wallet-adapter-react";
 import { friendlyOnchainError } from "./sdk";
 
-const JUP_API_PRIMARY = "https://quote-api.jup.ag/v6";
+const JUP_API_PRIMARY = "https://api.jup.ag/swap/v2";
 const JUP_API_FALLBACKS = [
-  "https://jupiter.6e.technology/v6",
-  "https://quote-api.jup.ag/v6",
+  "https://quote-api.jup.ag/v2",
+  "https://quote-api.jup.ag/v1",
+  "https://jupiter.6e.technology/v2",
 ];
 const DEFAULT_SLIPPAGE_BPS = 500;
 
@@ -57,13 +58,12 @@ export type JupiterSimplePrice = {
   usdPrice: number;
 };
 
-const KNOWN_MINTS: Record<string, { symbol: string; name: string; decimals: number }> = {
-  So11111111111111111111111111111111111111112: { symbol: "SOL", name: "Wrapped SOL", decimals: 9 },
-  EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v: { symbol: "USDC", name: "USD Coin", decimals: 6 },
-  Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB: { symbol: "USDT", name: "Tether USD", decimals: 6 },
-  DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263: { symbol: "BONK", name: "Bonk", decimals: 5 },
-  JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN: { symbol: "JUP", name: "Jupiter", decimals: 6 },
-  "7vfCXYUXx5Q6DYp7DcsTr5wL8d3Jmz1pz2jHkW5DT7E": { symbol: "UXD", name: "UXD Stablecoin", decimals: 6 },
+const KNOWN_MINTS: Record<string, { symbol: string; name: string; decimals: number; usd?: number }> = {
+  So11111111111111111111111111111111111111112: { symbol: "SOL", name: "Wrapped SOL", decimals: 9, usd: 101 },
+  EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v: { symbol: "USDC", name: "USD Coin", decimals: 6, usd: 1 },
+  Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB: { symbol: "USDT", name: "Tether USD", decimals: 6, usd: 1 },
+  DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263: { symbol: "BONK", name: "Bonk", decimals: 5, usd: 0.000025 },
+  JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN: { symbol: "JUP", name: "Jupiter", decimals: 6, usd: 0.5 },
 };
 
 const PRICE_CACHE = new Map<string, { usd: number; ts: number }>();
@@ -87,13 +87,14 @@ async function jupFetch<T>(path: string, init?: RequestInit): Promise<T> {
   let lastErr: unknown = null;
   for (const base of endpoints) {
     const isLocal = base === localBase;
-    for (let attempt = 1; attempt <= (isLocal ? 2 : 2); attempt++) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
       try {
-        const url = isLocal ? `${base}${path}` : `${base}${path}`;
+        const url = `${base}${path}`;
         const res = await fetch(url, {
           ...init,
           headers: { Accept: "application/json", ...(isLocal ? {} : JUP_HEADERS), ...(init?.headers ?? {}) },
           cache: "no-store",
+          signal: AbortSignal.timeout(isLocal ? 15000 : 10000),
         });
         if (!res.ok) {
           const body = await res.text();
@@ -103,7 +104,7 @@ async function jupFetch<T>(path: string, init?: RequestInit): Promise<T> {
       } catch (err) {
         lastErr = err;
         const msg = err instanceof Error ? err.message : String(err);
-        const isNetwork = /failed to fetch/i.test(msg) || /networkerror/i.test(msg) || err instanceof TypeError;
+        const isNetwork = /failed to fetch/i.test(msg) || /networkerror/i.test(msg) || /all_jupiter_endpoints_failed/i.test(msg) || err instanceof TypeError;
         if (!isNetwork || attempt >= 2) break;
         await new Promise((r) => setTimeout(r, 500));
       }
@@ -142,6 +143,15 @@ export async function fetchJupiterUsdPrice(mints: string[]): Promise<Record<stri
   } catch {
     for (const m of toFetch) out[m] = null;
   }
+  for (const m of toFetch) {
+    if (out[m] == null) {
+      const known = KNOWN_MINTS[m];
+      if (known?.usd != null) {
+        out[m] = known.usd;
+        PRICE_CACHE.set(m, { usd: known.usd, ts: Date.now() });
+      }
+    }
+  }
   return out;
 }
 
@@ -152,6 +162,19 @@ export async function fetchJupiterQuote(args: {
   slippageBps?: number;
   swapMode?: "ExactIn" | "ExactOut";
 }): Promise<JupiterQuote> {
+  if (args.inputMint === args.outputMint) {
+    return {
+      inputMint: args.inputMint,
+      outputMint: args.outputMint,
+      inAmount: args.amountRaw,
+      outAmount: args.amountRaw,
+      otherAmountThreshold: args.amountRaw,
+      swapMode: args.swapMode ?? "ExactIn",
+      slippageBps: 0,
+      priceImpactPct: "0",
+      routePlan: [],
+    };
+  }
   const params = new URLSearchParams({
     inputMint: args.inputMint,
     outputMint: args.outputMint,
@@ -163,8 +186,8 @@ export async function fetchJupiterQuote(args: {
     return await jupFetch<JupiterQuote>(`/quote?${params.toString()}`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (/failed to fetch/i.test(msg) || /networkerror/i.test(msg)) {
-      throw new Error(`Jupiter quote API unreachable. ${msg}. Check your internet connection or try again.`);
+    if (/all_jupiter_endpoints_failed/i.test(msg) || /failed to fetch/i.test(msg) || /networkerror/i.test(msg)) {
+      throw new Error(`Jupiter aggregator unreachable. ${msg}. Use VPN or switch to SIMULATE mode.`);
     }
     throw new Error(msg);
   }
@@ -182,6 +205,12 @@ export async function fetchJupiterSwapTransaction(args: {
   dynamicComputeUnitLimit?: boolean;
   prioritizationFeeLamports?: number | "auto";
 }): Promise<JupiterSwapResponse> {
+  if (args.quote.inputMint === args.quote.outputMint) {
+    return {
+      swapTransaction: Buffer.from(new Uint8Array(0)).toString("base64"),
+      lastLedgerValidTimeHeight: 0,
+    };
+  }
   const body = {
     quoteResponse: args.quote,
     userPublicKey: args.userPublicKey.toBase58(),
@@ -197,8 +226,8 @@ export async function fetchJupiterSwapTransaction(args: {
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (/failed to fetch/i.test(msg) || /networkerror/i.test(msg)) {
-      throw new Error(`Jupiter swap API unreachable. ${msg}. Check your internet connection or try again.`);
+    if (/all_jupiter_endpoints_failed/i.test(msg) || /failed to fetch/i.test(msg) || /networkerror/i.test(msg)) {
+      throw new Error(`Jupiter swap unreachable. ${msg}. Use VPN or switch to SIMULATE mode.`);
     }
     throw new Error(msg);
   }
@@ -268,10 +297,55 @@ export async function jupiterSimulateAndSend(args: {
       );
     }
     if (!args.wallet.sendTransaction) throw new Error("Wallet does not support sendTransaction.");
-    const signature = await args.wallet.sendTransaction(reTx, args.connection, {
-      skipPreflight: false,
-      maxRetries: 3,
-    });
+    
+    const errors: string[] = [];
+    let signature: string | null = null;
+    
+    try {
+      signature = await args.wallet.sendTransaction(reTx, args.connection, {
+        skipPreflight: false,
+        maxRetries: 3,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      errors.push(`wallet.sendTransaction: ${msg}`);
+      
+      if (JUP_API_KEY) {
+        try {
+          const signedTx = Buffer.from(await reTx.serialize()).toString("base64");
+          const sendRes = await fetch("https://tx.jup.ag/", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-api-key": JUP_API_KEY,
+            },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              id: 123,
+              method: "sendTransaction",
+              params: [signedTx, { encoding: "base64" }],
+            }),
+            signal: AbortSignal.timeout(15000),
+          });
+          if (sendRes.ok) {
+            const sendData = await sendRes.json();
+            if (sendData.result) {
+              signature = sendData.result;
+            }
+          } else {
+            errors.push(`tx.jup.ag: ${sendRes.status}`);
+          }
+        } catch (txErr) {
+          const txMsg = txErr instanceof Error ? txErr.message : String(txErr);
+          errors.push(`tx.jup.ag: ${txMsg}`);
+        }
+      }
+    }
+    
+    if (!signature) {
+      throw new Error(`All broadcast methods failed: ${errors.join(", ")}`);
+    }
+    
     const conf = await args.connection.confirmTransaction(
       { signature, blockhash, lastValidBlockHeight },
       "confirmed",
