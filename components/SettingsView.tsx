@@ -219,6 +219,19 @@ export function SettingsView() {
       {/* Trading */}
       {visibleSections.some((s) => s.id === "trade") ? (
         <Section title="Trading" desc="Defaults that apply to every trade and every chart.">
+          <label className="block space-y-1">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-mute">Currency</span>
+            <select
+              value={settings.currency}
+              onChange={(e) => update({ currency: e.target.value as "SOL" | "USD" | "USDC" })}
+              className="w-full rounded-md border border-line bg-ink-850 px-3 py-2 font-mono text-sm focus:border-neon focus:outline-none"
+            >
+              <option value="SOL">SOL</option>
+              <option value="USD">USD ($)</option>
+              <option value="USDC">USDC</option>
+            </select>
+            <p className="text-[11px] text-mute">Display currency for prices, P&L, and balances.</p>
+          </label>
           <NumberField
             label="Slippage %"
             hint="Default 5%. Any positive value allowed."
@@ -246,6 +259,12 @@ export function SettingsView() {
             checked={settings.autoTrade}
             onChange={(v) => update({ autoTrade: v })}
             danger
+          />
+          <Toggle
+            label="Notification sound / vibration"
+            hint="ON by default. Play a sound or vibrate on trade fills, TP/SL hits, and bot events."
+            checked={settings.notificationSound}
+            onChange={(v) => update({ notificationSound: v })}
           />
         </Section>
       ) : null}

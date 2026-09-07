@@ -164,6 +164,7 @@ export class WindowWalletAdapter extends BaseSignerWalletAdapter<WalletBrand> {
   readonly url = "";
   readonly icon = "";
   readonly supportedTransactionVersions = new Set<"legacy" | 0>();
+  readonly adapterName: string = "";
 
   #brand: WalletBrand;
   #provider: InjectedProvider | null = null;
@@ -174,6 +175,7 @@ export class WindowWalletAdapter extends BaseSignerWalletAdapter<WalletBrand> {
   constructor(brand: WalletBrand) {
     super();
     this.#brand = brand;
+    this.adapterName = BRAND_META[brand].name;
     const meta = BRAND_META[brand];
     (this as { name: WalletName<WalletBrand> }).name = meta.name;
     (this as { url: string }).url = meta.url;

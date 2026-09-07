@@ -329,6 +329,28 @@ export function BotView() {
         paper: e.kind === "sell_paper" || e.kind === "auto_sell_paper",
         holdingMinutes: Math.max(0, (e.ts - pos.updatedAt) / 60000),
       });
+      // Notify on closed trade
+      const isTp = pos.takeProfitPct != null && pnlPct >= pos.takeProfitPct;
+      const isSl = pos.stopLossPct != null && pnlPct <= -pos.stopLossPct;
+      const title = isTp ? "Take profit hit" : isSl ? "Stop loss hit" : "Position closed";
+      const body = `$${pos.symbol}: ${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(1)}% (${pnlSol >= 0 ? "+" : ""}${pnlSol.toFixed(4)} SOL)`;
+      // Determine level: danger for SL, success for TP, info for others
+      const level: "success" | "danger" | "info" = isSl ? "danger" : isTp ? "success" : "info";
+      // We use a custom event since notify is not directly imported here
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("pump-trader:notification", {
+            detail: {
+              key: `close-${e.mint}-${e.ts}`,
+              title,
+              body,
+              level,
+              category: "position",
+              persistent: true,
+            },
+          }),
+        );
+      }
     }
     setClosedTrades(loadClosedTrades(accountId));
     if (accountId) setLearning(recomputeLearningNow(accountId));

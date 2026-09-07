@@ -29,7 +29,11 @@ import {
 import type { WalletContextState } from "@solana/wallet-adapter-react";
 import { friendlyOnchainError } from "./sdk";
 
-const JUP_API = "https://quote-api.jup.ag/v6";
+const JUP_API_PRIMARY = "https://quote-api.jup.ag/v6";
+const JUP_API_FALLBACKS = [
+  "https://jupiter.6e.technology/v6",
+  "https://quote-api.jup.ag/v6",
+];
 const JUP_PRICE_API = "https://price.jup.ag/v6";
 const DEFAULT_SLIPPAGE_BPS = 500; // 5% — matches settings default
 
@@ -75,27 +79,28 @@ export function shortTokenLabel(mint: string, fallbackSymbol?: string): string {
 }
 
 async function jupFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const maxAttempts = 3;
+  const endpoints = [JUP_API_PRIMARY, ...JUP_API_FALLBACKS];
   let lastErr: unknown = null;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      const res = await fetch(`${JUP_API}${path}`, {
-        ...init,
-        headers: { Accept: "application/json", ...(init?.headers ?? {}) },
-        cache: "no-store",
-      });
-      if (!res.ok) {
-        const body = await res.text();
-        throw new Error(`Jupiter HTTP ${res.status}: ${body.slice(0, 200)}`);
+  for (const base of endpoints) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const res = await fetch(`${base}${path}`, {
+          ...init,
+          headers: { Accept: "application/json", ...(init?.headers ?? {}) },
+          cache: "no-store",
+        });
+        if (!res.ok) {
+          const body = await res.text();
+          throw new Error(`Jupiter HTTP ${res.status}: ${body.slice(0, 200)}`);
+        }
+        return (await res.json()) as T;
+      } catch (err) {
+        lastErr = err;
+        const msg = err instanceof Error ? err.message : String(err);
+        const isNetwork = /failed to fetch/i.test(msg) || /networkerror/i.test(msg) || err instanceof TypeError;
+        if (!isNetwork || attempt >= 2) break;
+        await new Promise((r) => setTimeout(r, 500));
       }
-      return (await res.json()) as T;
-    } catch (err) {
-      lastErr = err;
-      const msg = err instanceof Error ? err.message : String(err);
-      const isNetwork = /failed to fetch/i.test(msg) || /networkerror/i.test(msg) || err instanceof TypeError;
-      if (!isNetwork || attempt >= maxAttempts) break;
-      const delay = Math.min(1000 * Math.pow(2, attempt - 1), 4000);
-      await new Promise((r) => setTimeout(r, delay));
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));

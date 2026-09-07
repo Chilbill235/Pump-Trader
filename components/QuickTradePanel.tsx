@@ -21,6 +21,8 @@ import { CoinImage } from "./CoinImage";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { useSettings } from "./SettingsProvider";
 import { useActiveAccountId } from "./AccountsProvider";
+import { notify } from "./NotificationProvider";
+import { formatSol, formatToken } from "@/lib/currency";
 import {
   fetchJupiterQuote,
   fetchJupiterUsdPrice,
@@ -31,7 +33,6 @@ import {
 } from "@/lib/jupiter";
 import { fetchMintDecimals, getSolUsd } from "@/lib/token-value";
 import { useWalletData } from "./WalletDataProvider";
-import { notify } from "./NotificationProvider";
 import type { WalletToken } from "@/lib/portfolio";
 
 type HoldingLike = WalletToken & {
@@ -1330,12 +1331,12 @@ export function QuickTradePanel(props: Props) {
               <>
                 <p>
                   {side === "buy"
-                    ? `Spend ${amount} ${quote.inSymbol} → ~${tokensToUi(new BN(quote.outAmountRaw), quote.outDecimals)} ${quote.outSymbol}`
-                    : `Sell ${tokensToUi(new BN(quote.inAmountRaw), quote.inDecimals)} ${quote.inSymbol} → ~${lamportsToSol(new BN(quote.outAmountRaw))} SOL`}
+                    ? `Spend ${formatSol(quote.inAmountRaw, settings.currency, quote.inDecimals > 6 ? 4 : 2)} → ~${formatToken(quote.outAmountRaw, quote.outDecimals, settings.currency)} ${quote.outSymbol}`
+                    : `Sell ${formatToken(quote.inAmountRaw, quote.inDecimals, settings.currency)} ${quote.inSymbol} → ~${formatSol(quote.outAmountRaw, settings.currency, 4)}`}
                 </p>
                 <p>Via {venueLabel} · slippage {settings.slippagePct}%</p>
                 {quote.usdValue != null ? (
-                  <p>≈ ${quote.usdValue.toFixed(2)}</p>
+                  <p>≈ {formatSol(String(Math.round(quote.usdValue * 1_000_000)), settings.currency, 2)}</p>
                 ) : null}
               </>
             ) : null}

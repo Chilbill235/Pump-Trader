@@ -10,6 +10,7 @@ import { validateBotStart } from "@/lib/trade-limits";
 import { BOT_DRAFT_KEY, BOT_SESSION_KEY } from "@/lib/constants";
 import { safeReadScoped, safeWriteScoped } from "@/lib/accounts";
 import { getBalanceWithFallback } from "@/lib/connection";
+import { formatSol } from "@/lib/currency";
 
 type Props = {
   open: boolean;
@@ -53,6 +54,7 @@ export function StartBotModal({ open, onClose }: Props) {
       tpPct?: number;
       slPct?: number;
       simulate?: boolean;
+      currency?: string;
     } | null>(accountId, BOT_DRAFT_KEY, null);
     if (draft) {
       if (typeof draft.durationH === "number") setDurationH(draft.durationH);
@@ -209,6 +211,7 @@ export function StartBotModal({ open, onClose }: Props) {
   }
 
   const balanceSol = balanceLamports != null ? balanceLamports / LAMPORTS_PER_SOL : null;
+  const currency = settings.currency ?? "SOL";
 
   return (
     <div
@@ -274,10 +277,9 @@ export function StartBotModal({ open, onClose }: Props) {
                 "—"
               ) : (
                 <>
-                  <span className="text-neon">{balanceSol.toFixed(4)}</span>{" "}
-                  <span className="text-mute">SOL</span>
-                  {solUsd != null ? (
-                    <span className="text-mute"> ≈ <span className="text-info">${(balanceSol * solUsd).toFixed(2)}</span></span>
+                  <span className="text-neon">{formatSol(balanceLamports!, currency, 4)}</span>
+                  {gateError ? (
+                    <span className="ml-2 text-warn">· {gateError}</span>
                   ) : null}
                 </>
               )}
@@ -343,7 +345,7 @@ export function StartBotModal({ open, onClose }: Props) {
                 onChange={(v) => setMaxOpenPos(Math.max(1, Math.round(v)))}
               />
               <Field
-                label="Daily loss limit SOL"
+                label="Daily loss limit"
                 value={dailyLossSol}
                 step={0.0001}
                 min={0}

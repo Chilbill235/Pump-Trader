@@ -29,6 +29,8 @@ export type AppSettings = {
   requireMetadata: boolean;
   takeProfitPct: number;
   stopLossPct: number;
+  currency: "SOL" | "USD" | "USDC";
+  notificationSound: boolean;
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -48,6 +50,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   requireMetadata: true,
   takeProfitPct: 20,
   stopLossPct: 15,
+  currency: "SOL",
+  notificationSound: true,
 };
 
 export function isPublicRpc(url: string): boolean {
@@ -128,6 +132,8 @@ export function loadSettings(accountId: string | null): AppSettings {
           : true,
       takeProfitPct: numInRange(parsed.takeProfitPct, 20, 0.1, 1_000_000),
       stopLossPct: numInRange(parsed.stopLossPct, 15, 0.1, 1_000_000),
+      currency: (parsed.currency === "USD" || parsed.currency === "USDC") ? parsed.currency : "SOL",
+      notificationSound: parsed.notificationSound !== false,
     };
   } catch {
     return DEFAULT_SETTINGS;

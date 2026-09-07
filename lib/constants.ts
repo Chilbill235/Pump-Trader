@@ -1,5 +1,5 @@
 export const DEFAULT_RPC =
-  "https://api.mainnet-beta.solana.com";
+  "https://solana-rpc.publicnode.com";
 
 export const PUMP_API_BASE =
   process.env.NEXT_PUBLIC_PUMP_API_BASE?.trim() ||

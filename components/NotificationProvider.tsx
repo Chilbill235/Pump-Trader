@@ -24,6 +24,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useSettings } from "./SettingsProvider";
 
 export type NotificationLevel = "info" | "success" | "warn" | "danger";
 export type NotificationCategory =
@@ -126,6 +127,7 @@ function save(accountId: string | null, list: Notification[]) {
 }
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
+  const { settings } = useSettings();
   const [accountId, setAccountId] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [toast, setToast] = useState<Notification | null>(null);
@@ -182,14 +184,26 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
             .catch(() => undefined);
         } else if (isHidden) {
           // Fallback: in-page notification if SW isn't ready.
-          new Notification(n.title, {
-            body: n.body,
-            tag: n.key ?? n.id,
-          });
+          try {
+            new Notification(n.title, {
+              body: n.body,
+              tag: n.key ?? n.id,
+            });
+          } catch { /* ignore */ }
         }
       }
+      // Haptic / audio feedback for in-app toasts when the page is visible.
+      if (settings.notificationSound && typeof document !== "undefined" && document.visibilityState === "visible") {
+        try {
+          if ("vibrate" in navigator) {
+            (navigator as unknown as { vibrate: (pattern: number | number[]) => void }).vibrate(
+              n.level === "danger" ? [200, 100, 200] : n.level === "warn" ? [100, 50, 100] : 50,
+            );
+          }
+        } catch { /* ignore */ }
+      }
     },
-    [accountId, notifications, permission],
+    [accountId, notifications, permission, settings?.notificationSound],
   );
 
   useEffect(() => {
@@ -252,13 +266,147 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Listen for service-worker messages that target this page.
+  // Periodic notifications: balance updates, TP/SL, bot status, daily summary.
+  useEffect(() => {
+    if (!accountId) return;
+    const KEY = `pump-trader:acct:${accountId}:notif-state`;
+    let cancelled = false;
+    const loadState = () => {
+      try {
+        const raw = typeof window !== "undefined" ? window.localStorage.getItem(KEY) : null;
+        return raw ? JSON.parse(raw) : { lastBalance: null, lastEquity: null, lastBotStatus: null, lastNotifTs: 0, lastSummaryDate: null };
+      } catch {
+        return { lastBalance: null, lastEquity: null, lastBotStatus: null, lastNotifTs: 0, lastSummaryDate: null };
+      }
+    };
+    const saveState = (s: Record<string, unknown>) => {
+      try {
+        if (typeof window !== "undefined") window.localStorage.setItem(KEY, JSON.stringify(s));
+      } catch { /* ignore */ }
+    };
+    const state = loadState();
+    const tick = async () => {
+      if (cancelled) return;
+      const now = Date.now();
+      if (now - (state.lastNotifTs ?? 0) < 60_000) return; // throttle to 1/min
+      try {
+        // Daily summary notification at ~9 AM local time
+        const today = new Date().toDateString();
+        if (state.lastSummaryDate !== today && new Date().getHours() === 9) {
+          const closedRaw = typeof window !== "undefined"
+            ? window.localStorage.getItem(`pump-trader:acct:${accountId}:closed-trades:v1`)
+            : null;
+          let tradesToday = 0;
+          let pnlToday = 0;
+          if (closedRaw) {
+            try {
+              const trades = JSON.parse(closedRaw);
+              const dayStart = new Date().setHours(0, 0, 0, 0);
+              trades.forEach((t: { ts: number; pnlSol: number }) => {
+                if (t.ts >= dayStart) {
+                  tradesToday++;
+                  pnlToday += t.pnlSol;
+                }
+              });
+            } catch { /* ignore */ }
+          }
+          notify({
+            key: `daily-summary-${today}`,
+            title: "Daily Summary",
+            body: `${tradesToday} trades today · P&L: ${pnlToday >= 0 ? "+" : ""}${pnlToday.toFixed(4)} SOL`,
+            level: "info",
+            category: "bot",
+            persistent: true,
+          });
+          state.lastSummaryDate = today;
+        }
+        // Bot status check
+        const sessionRaw = typeof window !== "undefined"
+          ? window.localStorage.getItem(`pump-trader:acct:${accountId}:bot-session:v1`)
+          : null;
+        const session = sessionRaw ? JSON.parse(sessionRaw) : null;
+        const botActive = !!session;
+        if (state.lastBotStatus === false && botActive) {
+          notify({
+            key: "bot-started",
+            title: "Bot started",
+            body: `Auto-trade bot is now running ${session?.simulate ? "(simulate)" : "(live)"}.`,
+            level: "success",
+            category: "bot",
+            persistent: true,
+          });
+        } else if (state.lastBotStatus === true && !botActive) {
+          notify({
+            key: "bot-stopped",
+            title: "Bot stopped",
+            body: "Auto-trade bot is no longer running.",
+            level: "info",
+            category: "bot",
+            persistent: true,
+          });
+        }
+        state.lastBotStatus = botActive;
+        // Wallet balance check
+        const balanceRaw = typeof window !== "undefined"
+          ? window.localStorage.getItem(`pump-trader:acct:${accountId}:wallet-data:v1`)
+          : null;
+        if (balanceRaw) {
+          try {
+            const data = JSON.parse(balanceRaw);
+            const solBalance = data?.sol ?? null;
+            if (solBalance != null && state.lastBalance != null && solBalance < state.lastBalance * 0.5) {
+              notify({
+                key: "balance-low",
+                title: "Low balance",
+                body: `Wallet balance dropped to ${solBalance.toFixed(4)} SOL. Top up to keep trading.`,
+                level: "warn",
+                category: "wallet",
+                persistent: false,
+              });
+            }
+            state.lastBalance = solBalance;
+          } catch { /* ignore */ }
+        }
+        // Equity / PnL check
+        const equityCurveRaw = typeof window !== "undefined"
+          ? window.localStorage.getItem(`pump-trader:acct:${accountId}:equity:v1`)
+          : null;
+        if (equityCurveRaw) {
+          try {
+            const curve = JSON.parse(equityCurveRaw);
+            if (curve.length > 0) {
+              const latest = curve[curve.length - 1];
+              const equitySol = latest?.equitySol ?? null;
+              if (equitySol != null && state.lastEquity != null && equitySol < state.lastEquity * 0.7) {
+                notify({
+                  key: "equity-drop",
+                  title: "Equity dropped",
+                  body: `Portfolio equity fell to ${equitySol.toFixed(4)} SOL. Review positions.`,
+                  level: "danger",
+                  category: "position",
+                  persistent: true,
+                });
+              }
+              state.lastEquity = equitySol;
+            }
+          } catch { /* ignore */ }
+        }
+        state.lastNotifTs = now;
+        saveState(state);
+      } catch { /* ignore */ }
+    };
+    void tick();
+    const id = setInterval(tick, 120_000); // every 2 minutes
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [accountId]);
   useEffect(() => {
     if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
     const onMessage = (e: MessageEvent) => {
       const data = (e.data || {}) as { type?: string; url?: string };
       if (data.type === "pump-trader:focus" && data.url) {
-        // Soft-navigate: just dispatch a hash so links don't reload.
         if (typeof data.url === "string" && data.url.startsWith("/")) {
           window.history.pushState({}, "", data.url);
           window.dispatchEvent(new PopStateEvent("popstate"));
@@ -267,6 +415,33 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     };
     navigator.serviceWorker.addEventListener("message", onMessage);
     return () => navigator.serviceWorker.removeEventListener("message", onMessage);
+  }, []);
+
+  // Listen for in-app notifications dispatched via custom events.
+  useEffect(() => {
+    const onNotif = (e: Event) => {
+      const detail = (e as CustomEvent<{
+        key?: string;
+        title: string;
+        body?: string;
+        level: "info" | "success" | "warn" | "danger";
+        category: NotificationCategory;
+        persistent?: boolean;
+        push?: boolean;
+      }>).detail;
+      if (!detail?.title) return;
+      notify({
+        key: detail.key,
+        title: detail.title,
+        body: detail.body,
+        level: detail.level,
+        category: detail.category,
+        persistent: detail.persistent,
+        push: detail.push,
+      });
+    };
+    window.addEventListener("pump-trader:notification", onNotif as EventListener);
+    return () => window.removeEventListener("pump-trader:notification", onNotif as EventListener);
   }, []);
 
   const unread = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);

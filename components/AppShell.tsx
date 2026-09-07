@@ -344,6 +344,7 @@ function Header(props: {
             holdingsCount={props.holdingsCount}
             live={props.live}
             endpoint={props.endpoint}
+            currency={props.settings.currency}
           /> : null}
           <NotificationBell onOpenChange={props.setNotifOpen} open={props.notifOpen} />
           {props.activeId ? (
@@ -403,8 +404,15 @@ function BalanceChip(props: {
   holdingsCount: number;
   live: boolean;
   endpoint: string | null;
+  currency: "SOL" | "USD" | "USDC";
 }) {
   const usd = props.sol != null && props.solUsd != null ? props.sol * props.solUsd : null;
+  const display = useMemo(() => {
+    if (props.sol == null) return null;
+    if (props.currency === "SOL") return { primary: `${props.sol.toFixed(4)} SOL`, secondary: usd != null ? `≈ $${usd < 1 ? usd.toFixed(3) : usd.toFixed(2)}` : null };
+    if (props.currency === "USD" || props.currency === "USDC") return { primary: `$${usd != null ? usd < 1 ? usd.toFixed(3) : usd.toFixed(2) : "0.00"}`, secondary: `${props.sol.toFixed(4)} SOL` };
+    return { primary: `${props.sol.toFixed(4)} SOL`, secondary: usd != null ? `≈ $${usd < 1 ? usd.toFixed(3) : usd.toFixed(2)}` : null };
+  }, [props.sol, usd, props.currency]);
   return (
     <Link
       href="/wallet"
@@ -428,14 +436,14 @@ function BalanceChip(props: {
       </span>
       <span aria-hidden className="text-neon">◎</span>
       <span className="text-zinc-100">
-        {props.sol == null ? (
+        {display == null ? (
           <span className="inline-block h-3 w-12 rounded skeleton align-middle" />
         ) : (
-          props.sol.toFixed(4)
+          display.primary
         )}
       </span>
-      {usd != null ? (
-        <span className="text-mute-2">${usd < 1 ? usd.toFixed(3) : usd.toFixed(2)}</span>
+      {display?.secondary != null ? (
+        <span className="text-mute-2">{display.secondary}</span>
       ) : null}
       {props.holdingsCount > 0 ? (
         <span className="rounded bg-neon/15 px-1 font-mono text-[10px] text-neon">
