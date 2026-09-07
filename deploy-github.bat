@@ -1,12 +1,11 @@
 @echo off
-setlocal EnableExtensions EnableDelayedExpansion
+setlocal EnableExtensions
 
 REM ============================================================
-REM Pump Trader - auto upload to GitHub
+REM Direct Git Push - No Auth Checks, No NPM Checks
 REM Usage:
 REM    deploy-github.bat                 (commit + push to current branch)
-REM    deploy-github.bat "msg"           (custom commit message)
-REM    set GH_TOKEN=ghp_xxx && deploy-github.bat
+REM    deploy-github.bat "your msg"      (custom commit message)
 REM ============================================================
 
 set "SCRIPT_DIR=%~dp0"
@@ -14,140 +13,52 @@ if "%SCRIPT_DIR:~-1%"=="\" set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
 if "%REPO_DIR%"=="" set "REPO_DIR=%SCRIPT_DIR%"
 if "%REMOTE_NAME%"=="" set "REMOTE_NAME=origin"
 set "COMMIT_MSG=%~1"
-if "%COMMIT_MSG%"=="" set "COMMIT_MSG=Update pump-trader"
+if "%COMMIT_MSG%"=="" set "COMMIT_MSG=Update project"
 set "GH_REPO=https://github.com/Chilbill235/Pump-Trader.git"
 
 cd /d "%REPO_DIR%"
 if errorlevel 1 (
-  echo [ERROR] Could not cd to %REPO_DIR%
+  echo [ERROR] Could not navigate to %REPO_DIR%
   exit /b 1
 )
 
-echo === Repository: %REPO_DIR% ===
-
-where git >nul 2>&1
-if errorlevel 1 (
-  echo [ERROR] git is not installed or not in PATH.
-  exit /b 1
-)
-
-REM --- Ensure repo + remote exist. ---
+REM --- Ensure local git repo exists ---
 git rev-parse --is-inside-work-tree >nul 2>&1
 if errorlevel 1 (
-  echo [INFO] Not a git repo. Initialising...
+  echo [INFO] Initializing git repository...
   git init
-  if errorlevel 1 (
-    echo [ERROR] git init failed.
-    exit /b 1
-  )
-  git symbolic-ref HEAD refs/heads/main >nul 2>&1
+  git branch -M main
 )
 
+REM --- Ensure remote origin exists ---
 git remote get-url "%REMOTE_NAME%" >nul 2>&1
 if errorlevel 1 (
-  echo [INFO] Remote '%REMOTE_NAME%' missing. Adding %GH_REPO%.
+  echo [INFO] Adding remote %REMOTE_NAME%...
   git remote add "%REMOTE_NAME%" "%GH_REPO%"
-  if errorlevel 1 (
-    echo [ERROR] git remote add failed.
-    exit /b 1
-  )
 )
 
-REM --- Determine branch. ---
-git symbolic-ref --short HEAD >nul 2>&1
-if errorlevel 1 (
-  echo [INFO] No current branch. Creating 'main'.
-  git checkout -b main
-)
-if "%BRANCH_NAME%"=="" (
-  for /f "delims=" %%B in ('git symbolic-ref --short HEAD') do set "BRANCH_NAME=%%B"
-)
+REM --- Determine current branch name ---
+for /f "delims=" %%B in ('git rev-parse --abbrev-ref HEAD 2^>nul') do set "BRANCH_NAME=%%B"
+if "%BRANCH_NAME%"=="" set "BRANCH_NAME=main"
 
-REM --- Stage everything first to allow safe rebase/pull ---
-echo === git add -A ===
+echo === Staging files ===
 git add -A
+
+echo === Committing changes ===
+git diff --cached --quiet
 if errorlevel 1 (
-  echo [ERROR] git add failed.
+  git commit -m "%COMMIT_MSG%"
+) else (
+  echo [INFO] Nothing new to commit.
+)
+
+echo === Pushing to %REMOTE_NAME%/%BRANCH_NAME% ===
+git push -u "%REMOTE_NAME%" "%BRANCH_NAME%"
+
+if errorlevel 1 (
+  echo [ERROR] Push failed.
   exit /b 1
 )
 
-REM --- Pull changes if remote branch exists ---
-git ls-remote --heads "%REMOTE_NAME%" "%BRANCH_NAME%" >nul 2>&1
-if not errorlevel 1 (
-  echo === git pull --rebase --autostash %REMOTE_NAME% %BRANCH_NAME% ===
-  git pull --rebase --autostash "%REMOTE_NAME%" "%BRANCH_NAME%"
-  if errorlevel 1 (
-    echo [WARN] pull --rebase failed, attempting merge fallback...
-    git pull "%REMOTE_NAME%" "%BRANCH_NAME%" --allow-unrelated-histories --no-edit
-  )
-) else (
-  echo [INFO] Remote branch %REMOTE_NAME%/%BRANCH_NAME% not found, skipping pull.
-)
-
-REM --- Install deps if needed ---
-if not "%SKIP_INSTALL%"=="1" (
-  if not exist "node_modules" (
-    echo === npm ci ===
-    call npm ci
-    if errorlevel 1 (
-      echo [WARN] npm ci failed, trying npm install.
-      call npm install
-    )
-  ) else (
-    echo [INFO] node_modules present, skipping install.
-  )
-)
-
-REM --- Typecheck + lint (skip if SKIP_CHECKS=1) ---
-if not "%SKIP_CHECKS%"=="1" (
-  echo === typecheck ===
-  call npm run typecheck
-  if errorlevel 1 (
-    echo [ERROR] typecheck failed. Fix errors before deploying.
-    exit /b 1
-  )
-  echo === lint ===
-  call npm run lint
-  if errorlevel 1 (
-    echo [ERROR] lint failed. Fix errors before deploying.
-    exit /b 1
-  )
-)
-
-REM --- Commit only if there's something new ---
-git diff --cached --quiet
-set "DIFF_RC=%ERRORLEVEL%"
-if not "%DIFF_RC%"=="0" (
-  echo === git commit -m "%COMMIT_MSG%" ===
-  git commit -m "%COMMIT_MSG%"
-  if errorlevel 1 (
-    echo [ERROR] git commit failed.
-    exit /b 1
-  )
-) else (
-  echo [INFO] Nothing to commit, proceeding to push.
-)
-
-REM --- Push ---
-set "PUSH_RC=0"
-if defined GH_TOKEN (
-  for /f "delims=" %%R in ('git remote get-url "%REMOTE_NAME%"') do set "REMOTE_URL=%%R"
-  set "AUTH_URL=!REMOTE_URL:https://=https://%GH_TOKEN%@!"
-  echo === git push (authenticated token) %REMOTE_NAME% %BRANCH_NAME% ===
-  git push "!AUTH_URL!" "%BRANCH_NAME%"
-  set "PUSH_RC=!ERRORLEVEL!"
-  set "AUTH_URL="
-) else (
-  echo === git push %REMOTE_NAME% %BRANCH_NAME% ===
-  git push "%REMOTE_NAME%" "%BRANCH_NAME%"
-  set "PUSH_RC=!ERRORLEVEL!"
-)
-
-if not "!PUSH_RC!"=="0" (
-  echo [ERROR] git push failed with code !PUSH_RC!.
-  echo Hint: If this is an auth failure, set GH_TOKEN=ghp_xxxxxxxxxxxxxxxx
-  exit /b !PUSH_RC!
-)
-
-echo === done ===
+echo === Successfully uploaded to GitHub ===
 endlocal
