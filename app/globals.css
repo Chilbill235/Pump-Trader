@@ -144,13 +144,23 @@ input[type="number"] {
   pointer-events: none;
 }
 
-/* Marquee for the bot-running strip. */
+/* Marquee for the bot-running strip. The track is `w-max` and contains an
+   even number of identical segments, so translating -50% loops seamlessly
+   and the text always covers the full screen width. */
 @keyframes marquee {
   0% { transform: translateX(0); }
   100% { transform: translateX(-50%); }
 }
 .marquee {
+  display: flex;
+  width: max-content;
+  will-change: transform;
   animation: marquee 28s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .marquee {
+    animation: none;
+  }
 }
 
 /* Soft glow that gently breathes. */

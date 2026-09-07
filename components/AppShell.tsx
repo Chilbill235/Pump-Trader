@@ -513,8 +513,14 @@ function BotRunningStrip(props: {
   const age = props.session ? humanizeAge(now - props.session.startedAt) : "—";
   return (
     <div className="relative overflow-hidden border-b border-neon/30 bg-gradient-to-r from-neon/15 via-neon/5 to-neon/15">
-      <div aria-hidden className="pointer-events-none absolute inset-0 marquee whitespace-nowrap font-mono text-[10px] uppercase tracking-[0.4em] text-neon/15">
-        AUTO TRADING · PUMP TRADER · BOT ACTIVE · AUTO TRADING · PUMP TRADER · BOT ACTIVE · AUTO TRADING · PUMP TRADER · BOT ACTIVE ·
+      <div
+        aria-hidden
+        className="marquee pointer-events-none absolute inset-y-0 left-0 flex w-max items-center whitespace-nowrap font-mono text-[10px] uppercase tracking-[0.4em] text-neon/15"
+      >
+        <span>AUTO TRADING · PUMP TRADER · BOT ACTIVE ·&nbsp;</span>
+        <span>AUTO TRADING · PUMP TRADER · BOT ACTIVE ·&nbsp;</span>
+        <span>AUTO TRADING · PUMP TRADER · BOT ACTIVE ·&nbsp;</span>
+        <span>AUTO TRADING · PUMP TRADER · BOT ACTIVE ·&nbsp;</span>
       </div>
       <div className="relative mx-auto flex max-w-[1400px] items-center justify-between gap-3 px-3 py-2 sm:px-4">
         <div className="flex items-center gap-2 text-xs">

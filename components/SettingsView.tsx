@@ -7,6 +7,8 @@ import { useSettings } from "./SettingsProvider";
 import { useActiveAccountId } from "./AccountsProvider";
 import { getAccountPrefix } from "@/lib/accounts";
 import { useNotifications, notify } from "./NotificationProvider";
+import { useWalletData } from "./WalletDataProvider";
+import { autoTuneSettings, profileLabel, type TuneProfile } from "@/lib/autotune";
 
 type Section = {
   id: string;
@@ -33,6 +35,10 @@ export function SettingsView() {
   const [advanced, setAdvanced] = useState(false);
   const [rpcTest, setRpcTest] = useState<"idle" | "testing" | "ok" | "fail">("idle");
   const [rpcLatency, setRpcLatency] = useState<number | null>(null);
+  const [tuneProfile, setTuneProfile] = useState<TuneProfile>("balanced");
+  const [tuneResult, setTuneResult] = useState<ReturnType<typeof autoTuneSettings> | null>(null);
+  const walletData = useWalletData();
+  const recPatch = useMemo(() => autoTuneSettings(walletData.sol ?? 0, "balanced").patch, [walletData.sol]);
 
   const jumpTo = (id: string) => {
     document.getElementById(`settings-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -300,6 +306,73 @@ export function SettingsView() {
       {/* Trading */}
       {visibleSections.some((s) => s.id === "trading") ? (
         <Section title="Trading" desc="Defaults that apply to every trade and every chart.">
+          {/* Auto-tune: derive risk settings from the real wallet balance */}
+          <div className="rounded-lg border border-neon/30 bg-neon/5 p-3">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-neon">Auto-tune</p>
+            <p className="mt-1 text-[11px] text-mute">
+              Pick a risk profile and this app calculates position size, open-position limits, loss
+              caps, slippage, and TP/SL from your{" "}
+              <span className="text-white">
+                {walletData.sol != null ? `${walletData.sol.toFixed(3)} SOL` : "wallet"}
+              </span>{" "}
+              balance. No guesswork.
+            </p>
+            <div className="mt-2 grid grid-cols-3 gap-1.5">
+              {(["safe", "balanced", "degen"] as TuneProfile[]).map((p) => {
+                const meta = profileLabel(p);
+                const active = tuneProfile === p;
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setTuneProfile(p)}
+                    className={`press rounded-md border p-2 text-left transition-colors ${
+                      active
+                        ? "border-neon bg-neon/10"
+                        : "border-line bg-ink-850 hover:border-neon/50"
+                    }`}
+                  >
+                    <span className={`block font-mono text-xs font-semibold ${active ? "text-neon" : "text-white"}`}>
+                      {meta.title}
+                    </span>
+                    <span className="mt-0.5 block text-[10px] leading-tight text-mute">{meta.desc}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {tuneResult && tuneResult.patch.slippagePct != null ? (
+              <div className="mt-2 space-y-1">
+                {tuneResult.rationale.map((r) => (
+                  <p key={r} className="text-[11px] text-mute">• {r}</p>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    update(tuneResult.patch);
+                    setTuneResult(null);
+                    notify({
+                      title: "Settings auto-tuned",
+                      body: "Trading and bot limits were recalculated for your balance.",
+                      level: "success",
+                      category: "system",
+                    });
+                  }}
+                  className="press mt-1 w-full rounded-md border border-neon/50 bg-neon/10 px-3 py-2 font-mono text-xs font-semibold text-neon hover:bg-neon/20 min-h-9"
+                >
+                  Apply these settings
+                </button>
+              </div>
+            ) : null}
+            {!tuneResult ? (
+              <button
+                type="button"
+                onClick={() => setTuneResult(autoTuneSettings(walletData.sol ?? 0, tuneProfile))}
+                className="press mt-2 w-full rounded-md border border-line bg-ink-850 px-3 py-2 font-mono text-xs text-mute hover:border-neon hover:text-neon min-h-9"
+              >
+                ⚡ Calculate for my balance
+              </button>
+            ) : null}
+          </div>
           <label className="block space-y-1">
             <span className="font-mono text-[10px] uppercase tracking-widest text-mute">Currency</span>
             <select
@@ -377,7 +450,7 @@ export function SettingsView() {
               />
               <NumberField
                 label="max_position_sol"
-                hint="Risk brake. Queue size and max cost per mint (default 0.1). Any value allowed."
+                hint={`Risk brake. Max cost per mint (default 0.1).${recPatch.maxPositionSol != null ? ` Recommended for your balance: ${recPatch.maxPositionSol} SOL.` : ""}`}
                 value={settings.maxPositionSol}
                 min={0.0001}
                 step={0.0001}
@@ -393,7 +466,7 @@ export function SettingsView() {
               />
               <NumberField
                 label="daily_loss_limit"
-                hint="Do not queue if today's pipeline spend + realized loss ≥ this SOL (default 0.3)."
+                hint={`Do not queue if today's pipeline spend + realized loss ≥ this SOL (default 0.3).${recPatch.dailyLossLimit != null ? ` Recommended for your balance: ${recPatch.dailyLossLimit} SOL.` : ""}`}
                 value={settings.dailyLossLimit}
                 min={0}
                 step={0.0001}
@@ -433,7 +506,7 @@ export function SettingsView() {
         <Section title="Position rules" desc="TP/SL defaults applied to new positions.">
           <NumberField
             label="Take profit %"
-            hint="Auto-sell when unrealized gain reaches this."
+            hint={`Auto-sell when unrealized gain reaches this.${recPatch.takeProfitPct != null ? ` Recommended: ${recPatch.takeProfitPct}%.` : ""}`}
             value={settings.takeProfitPct}
             min={0.1}
             step={0.5}
@@ -441,7 +514,7 @@ export function SettingsView() {
           />
           <NumberField
             label="Stop loss %"
-            hint="Auto-sell when unrealized loss reaches this."
+            hint={`Auto-sell when unrealized loss reaches this.${recPatch.stopLossPct != null ? ` Recommended: ${recPatch.stopLossPct}%.` : ""}`}
             value={settings.stopLossPct}
             min={0.1}
             step={0.5}
