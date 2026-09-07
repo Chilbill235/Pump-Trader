@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const JUP_API_KEY = process.env.NEXT_PUBLIC_JUPITER_API_KEY?.trim();
+const JUP_API_KEY = process.env.JUPITER_API_KEY?.trim();
 
 /**
  * Two supported request shapes:

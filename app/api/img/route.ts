@@ -79,6 +79,28 @@ export async function GET(req: NextRequest) {
     candidates = [`${AR_HOST}/${id}`];
   } else if (/^https?:\/\//i.test(raw)) {
     if (raw.length > 1024) return new NextResponse("url too long", { status: 400 });
+    try {
+      const u = new URL(raw);
+      // Allowlist: never proxy arbitrary URLs (SSRF / open-proxy risk).
+      const allowed = [
+        "pump.fun",
+        "arweave.net",
+        "nftstorage.link",
+        "gateway.pinata.cloud",
+        "ipfs.io",
+        "dweb.link",
+        "w3s.link",
+        "4everland.io",
+        "cloudflare-ipfs.com",
+        "cf-ipfs.com",
+      ];
+      const ok =
+        u.protocol === "https:" &&
+        allowed.some((h) => u.hostname === h || u.hostname.endsWith(`.${h}`));
+      if (!ok) return new NextResponse("host not allowed", { status: 400 });
+    } catch {
+      return new NextResponse("bad url", { status: 400 });
+    }
     candidates = [raw];
   } else {
     return new NextResponse("unsupported scheme", { status: 400 });
@@ -105,6 +127,11 @@ export async function GET(req: NextRequest) {
   const res = winner.r.value;
   const buf = Buffer.from(await res.arrayBuffer());
   const ct = res.headers.get("content-type") ?? "image/png";
+  // Never serve attacker-controlled SVG: browsers render it as a document,
+  // which makes this an XSS vector.
+  if (ct.includes("svg")) {
+    return new NextResponse("svg not allowed", { status: 415 });
+  }
   return new NextResponse(buf, {
     status: 200,
     headers: {

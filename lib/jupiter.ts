@@ -7,7 +7,7 @@
  *   - GET  /swap/v2/order   - quote + assembled transaction (needs `taker`)
  *   - POST /swap/v2/execute - managed transaction landing after in-wallet signing
  *
- * Keyless access works at 0.5 RPS; set NEXT_PUBLIC_JUPITER_API_KEY for higher
+ * Keyless access works at 0.5 RPS; set JUPITER_API_KEY (server-only env) for higher
  * limits. All Jupiter traffic goes through the app's own proxy routes
  * (/api/jupiter/quote, /api/jupiter/swap, /api/jupiter/price) so the API key
  * stays server-side and CORS is never an issue.

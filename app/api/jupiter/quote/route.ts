@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const JUP_API_KEY = process.env.NEXT_PUBLIC_JUPITER_API_KEY?.trim();
+const JUP_API_KEY = process.env.JUPITER_API_KEY?.trim();
 
 /**
  * Current Jupiter Swap API V2 (https://api.jup.ag/swap/v2).
