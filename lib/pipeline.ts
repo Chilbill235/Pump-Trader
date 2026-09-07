@@ -201,9 +201,6 @@ export function passesBasicFilter(
   settings: AppSettings,
   metrics: LaunchMetrics,
 ): { ok: true } | { ok: false; reason: string } {
-  if (metrics.complete) {
-    return { ok: false, reason: "already graduated — pipeline only buys on the curve" };
-  }
   if (coin.isBanned) {
     return { ok: false, reason: "token flagged is_banned on pump.fun" };
   }
@@ -221,7 +218,7 @@ export function passesBasicFilter(
       reason: `${src} unique buyers ${metrics.uniqueBuyers.count} < ${settings.minUniqueBuyers} (empty/thin curve)`,
     };
   }
-  if (metrics.bondingCurvePct >= settings.maxBondingCurvePct) {
+  if (!metrics.complete && metrics.bondingCurvePct >= settings.maxBondingCurvePct) {
     return {
       ok: false,
       reason: `bonding curve ${metrics.bondingCurvePct.toFixed(1)}% ≥ ${settings.maxBondingCurvePct}% — not early`,
@@ -531,9 +528,6 @@ export function reasonsNotToBuy(args: {
   }
   if (args.timingScore < 0.65) {
     reasons.push(`Crowded/off-hours tape: ${args.timingNote}.`);
-  }
-  if (args.coin.complete) {
-    reasons.push("Not on the bonding curve.");
   }
   // de-dupe while preserving order
   const seen = new Set<string>();

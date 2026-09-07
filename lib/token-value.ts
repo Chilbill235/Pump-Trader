@@ -187,6 +187,7 @@ export function looksLikePumpError(msg: string): boolean {
     lower.includes("bondingcurve") ||
     lower.includes("bonding curve") ||
     lower.includes("pool account not found") ||
+    lower.includes("Account does not exist or has no data") ||
     lower.includes("invalid account data") ||
     lower.includes("beyond buffer length") ||
     lower.includes("deserialize") ||

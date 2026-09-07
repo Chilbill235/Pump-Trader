@@ -201,7 +201,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         />
       ) : null}
 
-      {connected && !botRunning && !autoTradeActive && pathname !== "/bot" && pathname !== "/" ? (
+      {connected && !botRunning && !autoTradeActive ? (
         <StartBotBanner onStart={() => setBotModalOpen(true)} walletOk={walletOk} />
       ) : null}
 

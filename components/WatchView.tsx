@@ -286,9 +286,6 @@ export function WatchView() {
         solLamports,
         slippagePct: settings.slippagePct,
       });
-      if (preQuote.graduated || preQuote.venue !== "bonding-curve") {
-        throw new Error("Coin graduated off the curve — pipeline will not buy.");
-      }
 
       if (paper) {
         if (wallet.publicKey) {

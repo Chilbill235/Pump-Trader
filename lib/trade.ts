@@ -78,9 +78,6 @@ export async function simulateAndSend(args: {
     };
   }
 
-  if (args.side === "buy" && quote.graduated) {
-    throw new Error("Coin graduated after quote. Pipeline will not buy.");
-  }
 
   // Pre-flight balance check so we never try to sign an obviously-underfunded tx.
   // pump.fun bonding-curve buys may create an ATA, costing ~0.00203928 SOL rent.
@@ -113,11 +110,6 @@ export async function simulateAndSend(args: {
     slippagePct: args.slippagePct,
   });
 
-  if (args.side === "buy" && quote.graduated) {
-    throw new Error(
-      `Coin graduated during execution. Graduated: ${quote.graduated}, venue: ${quote.venue}. Aborting.`,
-    );
-  }
 
   const { tx, blockhash, lastValidBlockHeight } = await composeVersionedTx({
     connection: args.connection,

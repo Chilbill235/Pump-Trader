@@ -448,10 +448,9 @@ export function QuickTradePanel(props: Props) {
           });
           return;
         } catch (err) {
-          if (!isPumpTokenError(err)) {
+          if (pumpSupported === true && !isPumpTokenError(err)) {
             throw new Error(friendlyOnchainError(err, props.mint));
           }
-          // falls through to jupiter
           setPumpSupported(false);
         }
       }
