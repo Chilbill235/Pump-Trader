@@ -164,6 +164,7 @@ export function validateBotStart(args: {
   walletConnected: boolean;
   balanceLamports: number | null;
   solUsd: number | null;
+  currency?: "SOL" | "USD" | "USDC";
 }): string | null {
   if (!args.walletConnected) {
     return "Connect your Phantom wallet first.";
@@ -172,21 +173,35 @@ export function validateBotStart(args: {
     return "Could not read your SOL balance. Check your RPC connection.";
   }
   const sol = args.balanceLamports / LAMPORTS_PER_SOL;
-  if (args.solUsd != null && Number.isFinite(args.solUsd) && args.solUsd > 0) {
-    const usd = sol * args.solUsd;
-    if (usd < MIN_BOT_USD_BALANCE) {
+  const currency = args.currency ?? "SOL";
+  const usd = args.solUsd != null && Number.isFinite(args.solUsd) && args.solUsd > 0 ? sol * args.solUsd : null;
+  
+  if (currency === "USD" || currency === "USDC") {
+    const balanceInCurrency = usd ?? sol * 101;
+    if (balanceInCurrency < MIN_BOT_USD_BALANCE) {
+      const solLabel = currency === "USD" ? "SOL" : "SOL";
       return (
-        `Need at least $${MIN_BOT_USD_BALANCE.toFixed(2)} worth of SOL to start the bot ` +
-        `(wallet has ${sol.toFixed(4)} SOL ≈ $${usd.toFixed(2)}). ` +
+        `Need at least $${MIN_BOT_USD_BALANCE.toFixed(2)} worth of ${solLabel} to start the bot ` +
+        `(wallet has ${sol.toFixed(4)} ${solLabel} ≈ $${(usd ?? sol * 101).toFixed(2)}). ` +
         `Top up the wallet or lower your RPC/environment costs.`
       );
     }
+  }
+  
+  if (args.solUsd != null && Number.isFinite(args.solUsd) && args.solUsd > 0) {
+    const usdValue = sol * args.solUsd;
+    if (usdValue < MIN_BOT_USD_BALANCE) {
+      return (
+        `Need at least $${MIN_BOT_USD_BALANCE.toFixed(2)} worth of SOL to start the bot ` +
+        `(wallet has ${sol.toFixed(4)} SOL ≈ $${usdValue.toFixed(2)}). ` +
+        `Top up the wallet, get a free Helius key (helius.com), or set NEXT_PUBLIC_SOLANA_RPC_URL in .env.local.`
+      );
+    }
   } else {
-    // Fallback when we don't have a SOL price: gate on absolute SOL ≥ some sane floor.
     if (sol < 0.05) {
       return (
         `Need at least 0.05 SOL to start the bot (wallet has ${sol.toFixed(4)} SOL). ` +
-        `Could not fetch SOL price to convert the $5 minimum — set NEXT_PUBLIC_SOLANA_RPC_URL.`
+        `Get a free Helius key (helius.com) and set NEXT_PUBLIC_SOLANA_RPC_URL in .env.local.`
       );
     }
   }

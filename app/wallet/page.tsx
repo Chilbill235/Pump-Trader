@@ -702,7 +702,7 @@ function HoldingRow({ h, accountId }: { h: Holding; accountId: string | null }) 
 
 function friendlyRpcError(msg: string): string {
   if (/403|API key/i.test(msg)) {
-    return "Public RPCs are rate-limited. Set a private RPC in Settings (NEXT_PUBLIC_SOLANA_RPC_URL or Helius/QuickNet/Triton). Verify holdings on Solscan.";
+    return "RPC rate-limited. Get a free Helius key at heliums.com, then set NEXT_PUBLIC_SOLANA_RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_KEY in .env.local. Verify holdings on Solscan.";
   }
   if (/429|rate limit/i.test(msg)) {
     return "RPC rate-limited. Add a private RPC in Settings or wait a minute.";

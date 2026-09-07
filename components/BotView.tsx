@@ -45,6 +45,7 @@ import { useSettings } from "./SettingsProvider";
 import { useActiveAccountId } from "./AccountsProvider";
 import { useWalletData } from "./WalletDataProvider";
 import { fetchJupiterUsdPrice } from "@/lib/jupiter";
+import { formatSol } from "@/lib/currency";
 
 const POLL_MS = 12_000;
 
@@ -433,7 +434,7 @@ export function BotView() {
         />
         <StatCard
           label="Equity"
-          value={`${stats.equitySol.toFixed(4)} SOL`}
+          value={formatSol(stats.equitySol, settings.currency ?? "SOL", 4)}
           sub={
             solUsd != null
               ? `≈ $${(stats.equitySol * solUsd).toFixed(2)} · SOL $${solUsd.toFixed(2)}`
@@ -468,7 +469,7 @@ export function BotView() {
         )}
         <StatCard
           label="Realized PnL"
-          value={`${stats.realizedPnlSol >= 0 ? "+" : ""}${stats.realizedPnlSol.toFixed(4)} SOL`}
+          value={formatSol(stats.realizedPnlSol, settings.currency ?? "SOL", 4)}
           sub={`${(stats.realizedPnlPct * 100).toFixed(2)}% from start · drawdown ${(stats.drawdownPct * 100).toFixed(1)}%`}
           tone={stats.realizedPnlSol > 0 ? "neon" : stats.realizedPnlSol < 0 ? "danger" : "mute"}
         />

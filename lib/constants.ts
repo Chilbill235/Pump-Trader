@@ -1,4 +1,5 @@
 export const DEFAULT_RPC =
+  process.env.NEXT_PUBLIC_SOLANA_RPC_URL?.trim() ||
   "https://solana-rpc.publicnode.com";
 
 export const PUMP_API_BASE =
@@ -15,7 +16,7 @@ export const TOKEN_DECIMALS = 6;
 export const SOL_DECIMALS = 9;
 export const DEFAULT_SLIPPAGE_PCT = 5;
 export const PUBLIC_RPC_WARNING =
-  "Public mainnet RPC is rate-limited. Set NEXT_PUBLIC_SOLANA_RPC_URL or a custom RPC in Settings.";
+  "Public mainnet RPC is rate-limited. Get a free Helius key at heliums.com and set NEXT_PUBLIC_SOLANA_RPC_URL in .env.local, or set a custom RPC in Settings.";
 
 export const SOLSCAN_TX = "https://solscan.io/tx/";
 export const SOLSCAN_TOKEN = "https://solscan.io/token/";

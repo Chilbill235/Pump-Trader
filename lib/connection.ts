@@ -23,7 +23,16 @@ export function getConnection(rpcUrl?: string): Connection {
 export const FREE_PUBLIC_RPCS: readonly string[] = [
   "https://solana-rpc.publicnode.com",
   "https://rpc.ankr.com/solana",
-  "https://api.mainnet-beta.solana.com",
+];
+
+/**
+ * Helius RPCs. These require an API key but are much more reliable than
+ * public RPCs. Users should set NEXT_PUBLIC_SOLANA_RPC_URL with their
+ * Helius endpoint in .env.local
+ */
+export const HELIUS_RPCS: readonly string[] = [
+  "https://sender.helius-rpc.com/fast",
+  "https://mainnet.helius-rpc.com",
 ];
 
 /**
@@ -41,6 +50,7 @@ export async function withRpcFallback<T>(
   const tried = new Set<string>();
   const order = [
     primary.rpcEndpoint,
+    ...HELIUS_RPCS.filter((u) => u !== primary.rpcEndpoint),
     ...FREE_PUBLIC_RPCS.filter((u) => u !== primary.rpcEndpoint),
   ];
   let lastErr: unknown = null;

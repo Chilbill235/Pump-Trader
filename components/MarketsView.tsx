@@ -405,8 +405,8 @@ function EmptyMarkets() {
       </div>
       <p className="font-mono text-sm">No coins returned</p>
       <p className="max-w-sm text-[11px] text-mute-2">
-        Paste a mint above to load it directly via on-chain. Public RPCs are rate-limited — set a
-        private one in Settings for the full list.
+        Paste a mint above to load it directly via on-chain. RPCs are rate-limited — get a free
+        Helius key at heliums.com and set NEXT_PUBLIC_SOLANA_RPC_URL in .env.local.
       </p>
     </div>
   );

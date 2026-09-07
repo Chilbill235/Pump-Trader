@@ -314,8 +314,8 @@ export function PositionsView() {
             <div className="p-3 text-xs text-danger">
               <p>Could not load wallet tokens: {holdingsErr}</p>
               <p className="mt-1 text-mute">
-                Public RPCs are rate-limited. Set a private RPC in Settings
-                (NEXT_PUBLIC_SOLANA_RPC_URL or Helius/QuickNet/Triton). Verify holdings on{" "}
+                RPC rate-limited. Get a free Helius key at heliums.com and set
+                NEXT_PUBLIC_SOLANA_RPC_URL in .env.local. Verify holdings on{" "}
                 {publicKey ? (
                   <a
                     className="underline"

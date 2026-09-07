@@ -10,7 +10,6 @@ import { validateBotStart } from "@/lib/trade-limits";
 import { BOT_DRAFT_KEY, BOT_SESSION_KEY } from "@/lib/constants";
 import { safeReadScoped, safeWriteScoped } from "@/lib/accounts";
 import { getBalanceWithFallback } from "@/lib/connection";
-import { formatSol } from "@/lib/currency";
 
 type Props = {
   open: boolean;
@@ -26,13 +25,14 @@ export function StartBotModal({ open, onClose }: Props) {
   const accountId = useActiveAccountId();
   const [durationH, setDurationH] = useState<number>(4);
   const [maxTrades, setMaxTrades] = useState<number>(10);
-  const [perCoinCapSol, setPerCoinCapSol] = useState<number>(settings.maxPositionSol);
+  const [perCoinCap, setPerCoinCap] = useState<number>(settings.maxPositionSol);
   const [maxOpenPos, setMaxOpenPos] = useState<number>(settings.maxOpenPositions);
-  const [dailyLossSol, setDailyLossSol] = useState<number>(settings.dailyLossLimit);
+  const [dailyLoss, setDailyLoss] = useState<number>(settings.dailyLossLimit);
   const [slippage, setSlippage] = useState<number>(settings.slippagePct);
   const [tpPct, setTpPct] = useState<number>(20);
   const [slPct, setSlPct] = useState<number>(15);
   const [simulate, setSimulate] = useState<boolean>(settings.simulateMode);
+  const [currency, setCurrency] = useState<"SOL" | "USD" | "USDC">(settings.currency ?? "SOL");
   const [confirmAck, setConfirmAck] = useState(false);
   const [busy, setBusy] = useState(false);
   const [balanceLamports, setBalanceLamports] = useState<number | null>(null);
@@ -47,9 +47,9 @@ export function StartBotModal({ open, onClose }: Props) {
     const draft = safeReadScoped<{
       durationH?: number;
       maxTrades?: number;
-      perCoinCapSol?: number;
+      perCoinCap?: number;
       maxOpenPos?: number;
-      dailyLossSol?: number;
+      dailyLoss?: number;
       slippage?: number;
       tpPct?: number;
       slPct?: number;
@@ -59,19 +59,21 @@ export function StartBotModal({ open, onClose }: Props) {
     if (draft) {
       if (typeof draft.durationH === "number") setDurationH(draft.durationH);
       if (typeof draft.maxTrades === "number") setMaxTrades(draft.maxTrades);
-      if (typeof draft.perCoinCapSol === "number") setPerCoinCapSol(draft.perCoinCapSol);
+      if (typeof draft.perCoinCap === "number") setPerCoinCap(draft.perCoinCap);
       if (typeof draft.maxOpenPos === "number") setMaxOpenPos(draft.maxOpenPos);
-      if (typeof draft.dailyLossSol === "number") setDailyLossSol(draft.dailyLossSol);
+      if (typeof draft.dailyLoss === "number") setDailyLoss(draft.dailyLoss);
       if (typeof draft.slippage === "number") setSlippage(draft.slippage);
       if (typeof draft.tpPct === "number") setTpPct(draft.tpPct);
       if (typeof draft.slPct === "number") setSlPct(draft.slPct);
       if (typeof draft.simulate === "boolean") setSimulate(draft.simulate);
+      if (draft.currency === "USD" || draft.currency === "USDC") setCurrency(draft.currency);
     } else {
-      setPerCoinCapSol(settings.maxPositionSol);
+      setPerCoinCap(settings.maxPositionSol);
       setMaxOpenPos(settings.maxOpenPositions);
-      setDailyLossSol(settings.dailyLossLimit);
+      setDailyLoss(settings.dailyLossLimit);
       setSlippage(settings.slippagePct);
       setSimulate(settings.simulateMode);
+      setCurrency(settings.currency ?? "SOL");
     }
     setConfirmAck(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -84,26 +86,28 @@ export function StartBotModal({ open, onClose }: Props) {
     safeWriteScoped(accountId, BOT_DRAFT_KEY, {
       durationH,
       maxTrades,
-      perCoinCapSol,
+      perCoinCap,
       maxOpenPos,
-      dailyLossSol,
+      dailyLoss,
       slippage,
       tpPct,
       slPct,
       simulate,
+      currency,
     });
   }, [
     accountId,
     open,
     durationH,
     maxTrades,
-    perCoinCapSol,
+    perCoinCap,
     maxOpenPos,
-    dailyLossSol,
+    dailyLoss,
     slippage,
     tpPct,
     slPct,
     simulate,
+    currency,
   ]);
 
   useEffect(() => {
@@ -154,9 +158,28 @@ export function StartBotModal({ open, onClose }: Props) {
     walletConnected: wallet.connected,
     balanceLamports,
     solUsd,
+    currency,
   });
   const walletMissing = !wallet.connected;
   const canStart = !!wallet.connected && !gateError && confirmAck;
+
+  function convertToSol(value: number): number {
+    if (currency === "SOL") return value;
+    const price = solUsd ?? 101;
+    return value / price;
+  }
+
+  function convertFromSol(sol: number): number {
+    if (currency === "SOL") return sol;
+    const price = solUsd ?? 101;
+    return sol * price;
+  }
+
+  function formatCurrency(value: number): string {
+    if (currency === "SOL") return `${value.toFixed(4)} SOL`;
+    if (currency === "USD" || currency === "USDC") return `$${value.toFixed(2)}`;
+    return `${value.toFixed(4)} SOL`;
+  }
 
   async function start() {
     setBusy(true);
@@ -167,9 +190,9 @@ export function StartBotModal({ open, onClose }: Props) {
         autoSell: true,
         pipelineEnabled: true,
         slippagePct: slippage,
-        maxPositionSol: perCoinCapSol,
+        maxPositionSol: convertToSol(perCoinCap),
         maxOpenPositions: maxOpenPos,
-        dailyLossLimit: dailyLossSol,
+        dailyLossLimit: convertToSol(dailyLoss),
         takeProfitPct: tpPct,
         stopLossPct: slPct,
         requireMetadata: true,
@@ -178,40 +201,40 @@ export function StartBotModal({ open, onClose }: Props) {
         safeWriteScoped(accountId, BOT_DRAFT_KEY, {
           durationH,
           maxTrades,
-          perCoinCapSol,
+          perCoinCap,
           maxOpenPos,
-          dailyLossSol,
+          dailyLoss,
           slippage,
           tpPct,
           slPct,
           simulate,
+          currency,
         });
       }
+      const currencyLabel = currency === "SOL" ? "SOL" : currency === "USD" ? "USD" : "USDC";
       appendBotLog(accountId, {
         kind: "start",
         simulate,
-        message: `started (${simulate ? "paper" : "LIVE"}) — ${durationH}h window · cap ${maxTrades} trades · ${perCoinCapSol} SOL/coin · TP ${tpPct}% / SL ${slPct}% · daily loss ${dailyLossSol} SOL · slip ${slippage}%`,
+        message: `started (${simulate ? "paper" : "LIVE"}) — ${durationH}h window · cap ${maxTrades} trades · ${perCoinCap} ${currencyLabel}/coin · TP ${tpPct}% / SL ${slPct}% · daily loss ${dailyLoss} ${currencyLabel} · slip ${slippage}%`,
       });
       safeWriteScoped(accountId, BOT_SESSION_KEY, {
         startedAt: Date.now(),
         durationHours: durationH,
         maxTrades,
-        perCoinCapSol,
+        perCoinCapSol: convertToSol(perCoinCap),
         maxOpenPos,
-        dailyLossSol,
+        dailyLossSol: convertToSol(dailyLoss),
         slippage,
         tpPct,
         slPct,
         simulate,
+        currency,
       });
       onClose();
     } finally {
       setBusy(false);
     }
   }
-
-  const balanceSol = balanceLamports != null ? balanceLamports / LAMPORTS_PER_SOL : null;
-  const currency = settings.currency ?? "SOL";
 
   return (
     <div
@@ -273,11 +296,11 @@ export function StartBotModal({ open, onClose }: Props) {
             <p className="mt-1 break-all font-mono text-base text-white">
               {walletMissing ? (
                 <span className="text-warn">Wallet not connected — connect to start.</span>
-              ) : balanceSol == null ? (
+              ) : balanceLamports == null ? (
                 "—"
               ) : (
                 <>
-                  <span className="text-neon">{formatSol(balanceLamports!, currency, 4)}</span>
+                  <span className="text-neon">{formatCurrency(convertFromSol(balanceLamports / LAMPORTS_PER_SOL))}</span>
                   {gateError ? (
                     <span className="ml-2 text-warn">· {gateError}</span>
                   ) : null}
@@ -288,12 +311,28 @@ export function StartBotModal({ open, onClose }: Props) {
               <p className="mt-2 rounded-md border border-danger/40 bg-danger/5 p-2 text-[11px] text-danger">
                 {gateError}
               </p>
-            ) : balanceSol != null && solUsd != null && !walletMissing ? (
+            ) : balanceLamports != null && solUsd != null && !walletMissing ? (
               <p className="mt-2 rounded-md border border-neon/40 bg-neon/5 p-2 text-[11px] text-neon">
                 Balance OK. Bot can start.
               </p>
             ) : null}
           </section>
+
+          <Section title="Currency">
+            <label className="block space-y-1">
+              <span className="font-mono text-[10px] uppercase tracking-widest text-mute">Spend currency</span>
+              <select
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value as "SOL" | "USD" | "USDC")}
+                className="w-full rounded-md border border-line bg-ink-850 px-3 py-2 font-mono text-sm focus:border-neon focus:outline-none"
+              >
+                <option value="SOL">SOL</option>
+                <option value="USD">USD ($)</option>
+                <option value="USDC">USDC</option>
+              </select>
+              <p className="text-[11px] text-mute">The bot converts limits to SOL internally. Prices are approximate.</p>
+            </label>
+          </Section>
 
           <Section title="Run length">
             <div className="flex flex-wrap gap-2">
@@ -331,11 +370,11 @@ export function StartBotModal({ open, onClose }: Props) {
                 onChange={(v) => setMaxTrades(Math.max(1, Math.round(v)))}
               />
               <Field
-                label="SOL per coin"
-                value={perCoinCapSol}
-                step={0.0001}
+                label={`Per-coin cap (${currency === "SOL" ? "SOL" : currency === "USD" ? "USD" : "USDC"})`}
+                value={perCoinCap}
+                step={currency === "SOL" ? 0.0001 : 0.01}
                 min={0.0001}
-                onChange={(v) => setPerCoinCapSol(Math.max(0.0001, v))}
+                onChange={(v) => setPerCoinCap(Math.max(0.0001, v))}
               />
               <Field
                 label="Max open positions"
@@ -345,11 +384,11 @@ export function StartBotModal({ open, onClose }: Props) {
                 onChange={(v) => setMaxOpenPos(Math.max(1, Math.round(v)))}
               />
               <Field
-                label="Daily loss limit"
-                value={dailyLossSol}
-                step={0.0001}
+                label={`Daily loss limit (${currency === "SOL" ? "SOL" : currency === "USD" ? "USD" : "USDC"})`}
+                value={dailyLoss}
+                step={currency === "SOL" ? 0.0001 : 0.01}
                 min={0}
-                onChange={(v) => setDailyLossSol(Math.max(0, v))}
+                onChange={(v) => setDailyLoss(Math.max(0, v))}
               />
               <Field
                 label="Slippage %"
