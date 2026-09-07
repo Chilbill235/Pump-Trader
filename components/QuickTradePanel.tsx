@@ -196,6 +196,18 @@ function classifyError(raw: string): ErrorHint {
       ],
     };
   }
+  if (lower.includes("failed to fetch") || lower.includes("networkerror")) {
+    return {
+      title: "Network — could not reach Jupiter",
+      detail: raw,
+      fixes: [
+        "Could not reach Jupiter's quote/swap API. This is usually a network/CORS issue.",
+        "If running on localhost, try: npx next dev --experimental-https (then accept the self-signed cert).",
+        "Or switch to SIMULATE mode to trade without hitting live APIs.",
+        "Check your internet connection and retry.",
+      ],
+    };
+  }
   return {
     title: "Trade failed",
     detail: raw,
@@ -388,6 +400,7 @@ export function QuickTradePanel(props: Props) {
     setBusy(true);
     setErrorInfo(null);
     setReceipt(null);
+    let pumpFailureReason = "";
     try {
       const parsed = parsedAmounts();
       const outSymbol = symbol;
@@ -448,9 +461,11 @@ export function QuickTradePanel(props: Props) {
           });
           return;
         } catch (err) {
+          const pumpErr = err instanceof Error ? err.message : String(err);
           if (pumpSupported === true && !isPumpTokenError(err)) {
             throw new Error(friendlyOnchainError(err, props.mint));
           }
+          pumpFailureReason = pumpErr;
           setPumpSupported(false);
         }
       }
@@ -483,8 +498,10 @@ export function QuickTradePanel(props: Props) {
         graduated: false,
       });
     } catch (err) {
+      const rawErr = err instanceof Error ? err.message : String(err);
+      const combined = pumpFailureReason ? `${rawErr} (pump path: ${pumpFailureReason})` : rawErr;
       setQuote(null);
-      setErrorInfo(classifyError(friendlyOnchainError(err, props.mint)));
+      setErrorInfo(classifyError(combined));
     } finally {
       setBusy(false);
     }

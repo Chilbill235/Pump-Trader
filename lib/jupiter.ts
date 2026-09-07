@@ -75,16 +75,30 @@ export function shortTokenLabel(mint: string, fallbackSymbol?: string): string {
 }
 
 async function jupFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${JUP_API}${path}`, {
-    ...init,
-    headers: { Accept: "application/json", ...(init?.headers ?? {}) },
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Jupiter HTTP ${res.status}: ${body.slice(0, 200)}`);
+  const maxAttempts = 3;
+  let lastErr: unknown = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const res = await fetch(`${JUP_API}${path}`, {
+        ...init,
+        headers: { Accept: "application/json", ...(init?.headers ?? {}) },
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(`Jupiter HTTP ${res.status}: ${body.slice(0, 200)}`);
+      }
+      return (await res.json()) as T;
+    } catch (err) {
+      lastErr = err;
+      const msg = err instanceof Error ? err.message : String(err);
+      const isNetwork = /failed to fetch/i.test(msg) || /networkerror/i.test(msg) || err instanceof TypeError;
+      if (!isNetwork || attempt >= maxAttempts) break;
+      const delay = Math.min(1000 * Math.pow(2, attempt - 1), 4000);
+      await new Promise((r) => setTimeout(r, delay));
+    }
   }
-  return (await res.json()) as T;
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
 }
 
 export async function fetchJupiterUsdPrice(mints: string[]): Promise<Record<string, number | null>> {
@@ -123,7 +137,7 @@ export async function fetchJupiterUsdPrice(mints: string[]): Promise<Record<stri
 export async function fetchJupiterQuote(args: {
   inputMint: string;
   outputMint: string;
-  amountRaw: string; // integer in input mint's decimals
+  amountRaw: string;
   slippageBps?: number;
   swapMode?: "ExactIn" | "ExactOut";
 }): Promise<JupiterQuote> {
@@ -137,7 +151,11 @@ export async function fetchJupiterQuote(args: {
   try {
     return await jupFetch<JupiterQuote>(`/quote?${params.toString()}`);
   } catch (err) {
-    throw new Error(friendlyOnchainError(err, args.outputMint));
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/failed to fetch/i.test(msg) || /networkerror/i.test(msg)) {
+      throw new Error(`Jupiter quote API unreachable. ${msg}. Check your internet connection or try again.`);
+    }
+    throw new Error(msg);
   }
 }
 
@@ -167,7 +185,11 @@ export async function fetchJupiterSwapTransaction(args: {
       body: JSON.stringify(body),
     });
   } catch (err) {
-    throw new Error(friendlyOnchainError(err, args.quote.outputMint));
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/failed to fetch/i.test(msg) || /networkerror/i.test(msg)) {
+      throw new Error(`Jupiter swap API unreachable. ${msg}. Check your internet connection or try again.`);
+    }
+    throw new Error(msg);
   }
 }
 
@@ -248,6 +270,10 @@ export async function jupiterSimulateAndSend(args: {
     }
     return { signature, quote: args.quote };
   } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/failed to fetch/i.test(msg) || /networkerror/i.test(msg)) {
+      throw new Error(`Jupiter swap unreachable. ${msg}. Check your internet or try again.`);
+    }
     throw new Error(friendlyOnchainError(err, args.quote.outputMint));
   }
 }

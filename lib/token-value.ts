@@ -20,7 +20,7 @@
 import type { Connection, PublicKey } from "@solana/web3.js";
 import BN from "bn.js";
 import { quoteTrade, friendlyOnchainError } from "./sdk";
-import { fetchJupiterUsdPrice } from "./jupiter";
+import { fetchJupiterUsdPrice, getKnownTokenMeta } from "./jupiter";
 import { TOKEN_DECIMALS } from "./constants";
 import { lamportsToSol, tokensToUi } from "./format";
 
@@ -207,6 +207,11 @@ export async function fetchMintDecimals(
   mint: string,
 ): Promise<number> {
   if (DECIMALS_CACHE.has(mint)) return DECIMALS_CACHE.get(mint)!;
+  const known = getKnownTokenMeta(mint);
+  if (known) {
+    DECIMALS_CACHE.set(mint, known.decimals);
+    return known.decimals;
+  }
   try {
     const info = await connection.getParsedAccountInfo(toPk(mint));
     const parsed = (info.value?.data as { parsed?: { info?: { decimals?: number } } } | undefined)
