@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { DEFAULT_RPC, PUBLIC_RPC_WARNING } from "@/lib/constants";
-import { isPublicRpc } from "@/lib/settings";
+import { isPublicRpc, DEFAULT_SETTINGS } from "@/lib/settings";
 import { useSettings } from "./SettingsProvider";
 import { useActiveAccountId } from "./AccountsProvider";
 import { getAccountPrefix } from "@/lib/accounts";
-import { useNotifications } from "./NotificationProvider";
+import { useNotifications, notify } from "./NotificationProvider";
 
 type Section = {
   id: string;
@@ -17,11 +17,11 @@ type Section = {
 
 const SECTIONS: Section[] = [
   { id: "rpc", title: "RPC & Network", match: () => true },
-  { id: "trade", title: "Trading", match: (s) => /slip|simul|trade|auto|wallet|hold/i.test(s) },
+  { id: "trading", title: "Trading", match: (s) => /slip|simul|trade|auto|wallet|hold/i.test(s) },
   { id: "watch", title: "Watch pipeline", match: (s) => /pipeline|score|curve|buyer|age|metadata|watch/i.test(s) },
   { id: "position", title: "Position rules", match: (s) => /take|stop|tp|sl|profit|loss/i.test(s) },
   { id: "data", title: "Data & backup", match: (s) => /export|import|backup|data/i.test(s) },
-  { id: "danger", title: "Emergency", match: () => true },
+  { id: "emergency", title: "Emergency stop", match: () => true },
 ];
 
 export function SettingsView() {
@@ -31,6 +31,37 @@ export function SettingsView() {
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [advanced, setAdvanced] = useState(false);
+  const [rpcTest, setRpcTest] = useState<"idle" | "testing" | "ok" | "fail">("idle");
+  const [rpcLatency, setRpcLatency] = useState<number | null>(null);
+
+  const jumpTo = (id: string) => {
+    document.getElementById(`settings-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const testRpc = async () => {
+    if (!/^https?:\/\//i.test(settings.rpcUrl)) {
+      setRpcTest("fail");
+      return;
+    }
+    setRpcTest("testing");
+    const started = performance.now();
+    try {
+      const res = await fetch(settings.rpcUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getVersion" }),
+        signal: AbortSignal.timeout(6000),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      const json = (await res.json()) as { result?: { "solana-core"?: string } };
+      if (!json?.result?.["solana-core"]) throw new Error("unexpected response");
+      setRpcLatency(Math.round(performance.now() - started));
+      setRpcTest("ok");
+    } catch {
+      setRpcLatency(null);
+      setRpcTest("fail");
+    }
+  };
 
   useEffect(() => {
     if (!settings) return;
@@ -78,16 +109,32 @@ export function SettingsView() {
         const data = JSON.parse(reader.result as string) as Record<string, unknown>;
         const prefix = accountId ? getAccountPrefix(accountId) : "";
         if (!prefix) {
-          alert("Unlock your account first.");
+          notify({
+            title: "Account locked",
+            body: "Unlock your account before importing a backup.",
+            level: "warn",
+            category: "system",
+          });
           return;
         }
         for (const [sub, value] of Object.entries(data)) {
           if (typeof sub !== "string") continue;
           window.localStorage.setItem(prefix + sub, JSON.stringify(value));
         }
-        window.location.reload();
+        notify({
+          title: "Backup imported",
+          body: `${Object.keys(data).length} entries restored. Reloading…`,
+          level: "success",
+          category: "system",
+        });
+        setTimeout(() => window.location.reload(), 800);
       } catch {
-        alert("Invalid backup file.");
+        notify({
+          title: "Invalid backup file",
+          body: "Could not parse the JSON backup.",
+          level: "danger",
+          category: "system",
+        });
       }
     };
     reader.readAsText(file);
@@ -143,6 +190,23 @@ export function SettingsView() {
             Advanced
           </label>
         </div>
+        {/* Quick-nav: jump to a section without scrolling */}
+        <nav className="flex flex-wrap gap-1.5" aria-label="Settings sections">
+          {SECTIONS.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => jumpTo(s.id)}
+              className={`press rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wide transition-colors ${
+                visibleSections.some((v) => v.id === s.id)
+                  ? "border-line bg-ink-850 text-mute hover:border-neon hover:text-neon"
+                  : "border-line/40 bg-ink-900/60 text-mute/40"
+              }`}
+            >
+              {s.title}
+            </button>
+          ))}
+        </nav>
       </header>
 
       {/* RPC & Network */}
@@ -171,6 +235,23 @@ export function SettingsView() {
             {!/^https?:\/\//i.test(settings.rpcUrl) && settings.rpcUrl !== "" && (
               <p className="rounded-md border border-danger/40 bg-danger/5 p-2 text-[11px] text-danger">Enter a valid HTTP(S) URL or reset to default.</p>
             )}
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void testRpc()}
+                disabled={rpcTest === "testing"}
+                className="press rounded-md border border-line bg-ink-850 px-3 py-1.5 font-mono text-[11px] text-mute hover:border-neon hover:text-neon disabled:opacity-50"
+              >
+                {rpcTest === "testing" ? "Testing…" : "Test connection"}
+              </button>
+              {rpcTest === "ok" ? (
+                <span className="font-mono text-[11px] text-neon">
+                  ✓ reachable{rpcLatency !== null ? ` · ${rpcLatency}ms` : ""}
+                </span>
+              ) : rpcTest === "fail" ? (
+                <span className="font-mono text-[11px] text-danger">✗ unreachable or not a Solana RPC</span>
+              ) : null}
+            </div>
             {isPublicRpc(settings.rpcUrl) ? (
               <p className="rounded-md border border-warn/40 bg-warn/5 p-2 text-[11px] text-warn">
                 {PUBLIC_RPC_WARNING}
@@ -217,7 +298,7 @@ export function SettingsView() {
       ) : null}
 
       {/* Trading */}
-      {visibleSections.some((s) => s.id === "trade") ? (
+      {visibleSections.some((s) => s.id === "trading") ? (
         <Section title="Trading" desc="Defaults that apply to every trade and every chart.">
           <label className="block space-y-1">
             <span className="font-mono text-[10px] uppercase tracking-widest text-mute">Currency</span>
@@ -384,12 +465,28 @@ export function SettingsView() {
             <input type="file" accept="application/json" onChange={importData} className="sr-only" aria-label="Import backup JSON file" />
             Import backup
           </label>
+            <button
+              type="button"
+              onClick={() => {
+                if (!window.confirm("Reset ALL settings to defaults? Positions and trade history are kept.")) return;
+                update({ ...DEFAULT_SETTINGS });
+                notify({
+                  title: "Settings reset",
+                  body: "All settings restored to defaults.",
+                  level: "info",
+                  category: "system",
+                });
+              }}
+              className="press rounded-md border border-line bg-ink-850 px-3 py-2 font-mono text-xs text-mute hover:border-warn hover:text-warn"
+            >
+              Reset all settings
+            </button>
           </div>
         </Section>
       ) : null}
 
       {/* Emergency */}
-      {visibleSections.some((s) => s.id === "danger") ? (
+      {visibleSections.some((s) => s.id === "emergency") ? (
         <Section title="Emergency stop" desc="Disable auto-trade immediately.">
           <button
             type="button"
@@ -405,8 +502,9 @@ export function SettingsView() {
 }
 
 function Section({ title, desc, children }: { title: string; desc?: string; children: React.ReactNode }) {
+  const id = `settings-${title.toLowerCase().split(" ")[0]}`;
   return (
-    <section className="relative overflow-hidden rounded-xl border border-line glass">
+    <section id={id} className="scroll-mt-4 relative overflow-hidden rounded-xl border border-line glass">
       <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line-soft bg-ink-850/80 px-3 py-2 backdrop-blur">
         <h2 className="font-mono text-sm font-semibold tracking-wide text-white">{title}</h2>
         {desc ? <p className="text-[11px] text-mute">{desc}</p> : null}

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useAccounts } from "./AccountsProvider";
 import { loadAccountProfile, saveAccountProfile } from "@/lib/profile";
+import { shortenAddress } from "@/lib/format";
 import { useInstallPrompt } from "./useInstallPrompt";
 import { ConnectWalletButton } from "./ConnectWalletButton";
 import { notify } from "./NotificationProvider";
@@ -106,11 +107,10 @@ export function MobileProfileSheet({
                   Wallet connected
                 </p>
               </div>
-              <p className="mt-1 break-all font-mono text-sm">{wallet.publicKey.toBase58()}</p>
-              <p className="mt-0.5 font-mono text-[11px] text-mute">
-                via {wallet.wallet?.adapter?.name ?? "Wallet"}
-              </p>
-              <div className="mt-2 grid grid-cols-2 gap-1.5">
+              <div className="mt-1 flex items-center gap-1">
+                <p className="min-w-0 flex-1 truncate font-mono text-sm">
+                  {shortenAddress(wallet.publicKey.toBase58(), 4, 4)}
+                </p>
                 <button
                   type="button"
                   onClick={async () => {
@@ -121,10 +121,22 @@ export function MobileProfileSheet({
                       // ignore
                     }
                   }}
-                  className="press rounded-md border border-line bg-ink-800 px-3 py-2 font-mono text-xs text-mute hover:border-neon hover:text-neon"
+                  className="press shrink-0 rounded border border-line bg-ink-800 px-1.5 py-0.5 font-mono text-[10px] text-mute hover:border-neon hover:text-neon"
                 >
-                  Copy address
+                  copy
                 </button>
+              </div>
+              <p className="mt-0.5 font-mono text-[11px] text-mute">
+                via {wallet.wallet?.adapter?.name ?? "Wallet"}
+              </p>
+              <div className="mt-2 grid grid-cols-2 gap-1.5">
+                <Link
+                  href="/wallet"
+                  onClick={onClose}
+                  className="press rounded-md border border-line bg-ink-800 px-3 py-2 text-center font-mono text-xs text-mute hover:border-neon hover:text-neon"
+                >
+                  Manage
+                </Link>
                 <button
                   type="button"
                   onClick={async () => {

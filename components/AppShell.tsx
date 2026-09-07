@@ -16,6 +16,7 @@ import { NotificationBell, ToastBanner, NotificationPanel } from "./Notification
 import { notify } from "./NotificationProvider";
 import { useInstallPrompt } from "./useInstallPrompt";
 import { loadAccountProfile, saveAccountProfile } from "@/lib/profile";
+import { shortenAddress } from "@/lib/format";
 import { ConnectWalletButton } from "./ConnectWalletButton";
 import { NavIcon, type NavIconName } from "./icons/NavIcon";
 import { MobileNavDrawer } from "./MobileNavDrawer";
@@ -668,7 +669,7 @@ function ProfileMenu(props: {
         >
           {activeAccount.username.slice(0, 1).toUpperCase()}
         </span>
-        <span className="hidden max-w-[10ch] truncate text-mute sm:inline">@{activeAccount.username}</span>
+        <span className="hidden max-w-[14ch] truncate font-semibold text-zinc-100 sm:inline">@{activeAccount.username}</span>
         <svg
           aria-hidden
           width="10"
@@ -763,6 +764,35 @@ function ProfileMenu(props: {
               </div>
             ) : null}
 
+            <div className="grid grid-cols-3 gap-1">
+              <Link
+                href="/wallet"
+                onClick={props.onClose}
+                role="menuitem"
+                className="press flex items-center justify-center gap-1.5 rounded-md border border-line bg-ink-800 px-2 py-2 text-xs text-mute hover:border-neon hover:text-neon"
+              >
+                <NavIcon name="wallet" className="h-3.5 w-3.5" />
+                Wallet
+              </Link>
+              <Link
+                href="/positions"
+                onClick={props.onClose}
+                role="menuitem"
+                className="press flex items-center justify-center gap-1.5 rounded-md border border-line bg-ink-800 px-2 py-2 text-xs text-mute hover:border-neon hover:text-neon"
+              >
+                <NavIcon name="positions" className="h-3.5 w-3.5" />
+                Positions
+              </Link>
+              <Link
+                href="/watch"
+                onClick={props.onClose}
+                role="menuitem"
+                className="press flex items-center justify-center gap-1.5 rounded-md border border-line bg-ink-800 px-2 py-2 text-xs text-mute hover:border-neon hover:text-neon"
+              >
+                <NavIcon name="watch" className="h-3.5 w-3.5" />
+                Watch
+              </Link>
+            </div>
             <div className="grid grid-cols-1 gap-1">
               <Link
                 href="/settings"
@@ -827,9 +857,8 @@ function WalletSection(props: {
           </span>
           <p className="font-mono text-[10px] uppercase tracking-widest text-neon">Wallet connected</p>
         </div>
-        <p className="mt-1 break-all font-mono text-sm">{props.publicKey}</p>
-        <p className="mt-0.5 font-mono text-[11px] text-mute">via {props.walletName ?? "Wallet"}</p>
-        <div className="mt-2 grid grid-cols-2 gap-1.5">
+        <div className="mt-1 flex items-center gap-1">
+          <p className="min-w-0 flex-1 truncate font-mono text-sm">{shortenAddress(props.publicKey, 4, 4)}</p>
           <button
             type="button"
             onClick={async () => {
@@ -840,15 +869,24 @@ function WalletSection(props: {
                 // ignore
               }
             }}
-            className="press rounded border border-line bg-ink-800 px-2 py-1.5 font-mono text-[11px] text-mute hover:border-neon hover:text-neon"
+            className="press shrink-0 rounded border border-line bg-ink-800 px-1.5 py-0.5 font-mono text-[10px] text-mute hover:border-neon hover:text-neon"
           >
-            Copy
+            copy
           </button>
+        </div>
+        <p className="mt-0.5 font-mono text-[11px] text-mute">via {props.walletName ?? "Wallet"}</p>
+        <div className="mt-2 grid grid-cols-2 gap-1.5">
           <Link
             href="/wallet"
             className="press rounded border border-line bg-ink-800 px-2 py-1.5 text-center font-mono text-[11px] text-mute hover:border-neon hover:text-neon"
           >
             Manage
+          </Link>
+          <Link
+            href="/positions"
+            className="press rounded border border-line bg-ink-800 px-2 py-1.5 text-center font-mono text-[11px] text-mute hover:border-neon hover:text-neon"
+          >
+            Positions
           </Link>
         </div>
       </div>

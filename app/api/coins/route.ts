@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchCoinList } from "@/lib/pump-api";
 import { searchCoins } from "@/lib/search";
+import { cached } from "@/lib/api-cache";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -13,9 +14,14 @@ export async function GET(req: NextRequest) {
       ? "newest"
       : "trending";
   try {
-    const result = q ? await searchCoins(q) : await fetchCoinList(kind);
+    // Short server-side cache so rapid page views / polling clients don't
+    // hammer the pump.fun frontend API (which rate-limits aggressively).
+    const key = q ? `coins:search:${q.toLowerCase()}` : `coins:${kind}`;
+    const result = await cached(key, 10_000, () =>
+      q ? searchCoins(q) : fetchCoinList(kind),
+    );
     return NextResponse.json(result, {
-      headers: { "Cache-Control": "no-store" },
+      headers: { "Cache-Control": "public, s-maxage=10, stale-while-revalidate=30" },
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

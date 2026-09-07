@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cached } from "@/lib/api-cache";
 
 const JUP_API_KEY = process.env.JUPITER_API_KEY?.trim();
 
@@ -29,27 +30,34 @@ export async function GET(request: NextRequest) {
   };
 
   const errors: string[] = [];
-  for (const base of PRICE_ENDPOINTS) {
-    try {
-      const target = new URL(base + "?" + searchParams.toString());
-      const res = await fetch(target.toString(), {
-        headers,
-        cache: "no-store",
-        signal: AbortSignal.timeout(8000),
-      });
-      if (res.ok) {
-        const body = await res.text();
-        return new NextResponse(body, {
-          status: res.status,
-          headers: { "Content-Type": res.headers.get("Content-Type") || "application/json" },
+  // 8s micro-cache: price polling from multiple components stays fresh enough
+  // while keeping well under Jupiter's rate limits.
+  const body = await cached(`jup-price:${ids.join(",")}`, 8_000, async () => {
+    for (const base of PRICE_ENDPOINTS) {
+      try {
+        const target = new URL(base + "?" + searchParams.toString());
+        const res = await fetch(target.toString(), {
+          headers,
+          cache: "no-store",
+          signal: AbortSignal.timeout(8000),
         });
+        if (res.ok) {
+          return { text: await res.text(), ct: res.headers.get("Content-Type") || "application/json" };
+        }
+        errors.push(`${base}: ${res.status}`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        errors.push(`${base}: ${msg}`);
+        continue;
       }
-      errors.push(`${base}: ${res.status}`);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      errors.push(`${base}: ${msg}`);
-      continue;
     }
+    return null;
+  });
+  if (body) {
+    return new NextResponse(body.text, {
+      status: 200,
+      headers: { "Content-Type": body.ct, "Cache-Control": "public, s-maxage=8, stale-while-revalidate=15" },
+    });
   }
 
   console.error("[jupiter/price] all endpoints failed:", errors);
