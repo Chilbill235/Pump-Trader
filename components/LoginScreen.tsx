@@ -31,6 +31,7 @@ export function LoginScreen() {
   const [showPin, setShowPin] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [hydratedOnce, setHydratedOnce] = useState(false);
+  const [capsLock, setCapsLock] = useState(false);
   const usernameRef = useRef<HTMLInputElement | null>(null);
   const pinRef = useRef<HTMLInputElement | null>(null);
 
@@ -267,11 +268,18 @@ export function LoginScreen() {
                 setPin(e.target.value);
                 setError(null);
               }}
+              onKeyUp={(e) => setCapsLock(e.getModifierState?.("CapsLock") ?? false)}
+              onBlur={() => setCapsLock(false)}
               minLength={4}
               maxLength={64}
               className="mt-1 w-full rounded-lg border border-line bg-ink-850 px-3 py-2.5 font-mono text-sm focus:border-neon focus:outline-none"
               aria-describedby="pin-strength"
             />
+            {capsLock ? (
+              <p className="mt-1 font-mono text-[10px] uppercase tracking-widest text-warn" role="status">
+                ⚠ Caps Lock is on
+              </p>
+            ) : null}
             {mode === "create" && pin.length > 0 ? (
               <div id="pin-strength" className="mt-1.5 flex items-center gap-2">
                 <div className="flex h-1 flex-1 gap-1">
@@ -308,10 +316,27 @@ export function LoginScreen() {
                   setConfirmPin(e.target.value);
                   setError(null);
                 }}
+                onKeyUp={(e) => setCapsLock(e.getModifierState?.("CapsLock") ?? false)}
+                onBlur={() => setCapsLock(false)}
                 minLength={4}
                 maxLength={64}
                 className="mt-1 w-full rounded-lg border border-line bg-ink-850 px-3 py-2.5 font-mono text-sm focus:border-neon focus:outline-none"
               />
+              {confirmPin.length > 0 ? (
+                <p
+                  className={`mt-1 font-mono text-[10px] uppercase tracking-widest ${
+                    confirmPin === pin ? "text-neon" : "text-danger"
+                  }`}
+                  role="status"
+                >
+                  {confirmPin === pin ? "✓ PINs match" : "✗ PINs don't match yet"}
+                </p>
+              ) : null}
+              {capsLock ? (
+                <p className="mt-1 font-mono text-[10px] uppercase tracking-widest text-warn" role="status">
+                  ⚠ Caps Lock is on
+                </p>
+              ) : null}
             </label>
           ) : null}
 

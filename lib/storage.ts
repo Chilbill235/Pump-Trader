@@ -19,8 +19,21 @@ const CURRENT_SCHEMA_VERSION = 2;
 
 export type StorageBackend = "localStorage" | "idb";
 
-const writeQueue = new Map<string, ReturnType<typeof setTimeout>>();
+const writeQueue = new Map<string, { value: unknown; timer: ReturnType<typeof setTimeout> }>();
 const DEBOUNCE_MS = 200;
+
+let lifecycleRegistered = false;
+function registerFlushLifecycle(): void {
+  if (lifecycleRegistered || typeof window === "undefined") return;
+  lifecycleRegistered = true;
+  // Persist the last debounced writes before the page goes away, so autosave
+  // never loses the final state (tab close, reload, background).
+  const flush = () => flushPendingWrites();
+  window.addEventListener("pagehide", flush);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flush();
+  });
+}
 
 let idbPromise: Promise<IDBDatabase> | null = null;
 const IDB_NAME = "pump-trader";
@@ -150,23 +163,23 @@ const MIGRATIONS: Record<number, () => void> = {
  */
 export function debouncedWrite(key: string, value: unknown): void {
   if (typeof window === "undefined") return;
+  registerFlushLifecycle();
   const existing = writeQueue.get(key);
-  if (existing) clearTimeout(existing);
+  if (existing) clearTimeout(existing.timer);
   const t = setTimeout(() => {
     lsWrite(key, value);
     writeQueue.delete(key);
   }, DEBOUNCE_MS);
-  writeQueue.set(key, t);
+  writeQueue.set(key, { value, timer: t });
 }
 
 export function flushPendingWrites(): void {
   if (typeof window === "undefined") return;
-  for (const [key, t] of writeQueue.entries()) {
-    clearTimeout(t);
-    const raw = writeQueue.get(key);
-    // The actual value was lost; just clear the timer.
+  for (const [key, entry] of writeQueue.entries()) {
+    clearTimeout(entry.timer);
+    // Persist the queued value — previously this dropped the data entirely.
+    lsWrite(key, entry.value);
     writeQueue.delete(key);
-    void raw;
   }
 }
 
