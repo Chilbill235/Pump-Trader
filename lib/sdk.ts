@@ -101,17 +101,28 @@ export async function fetchCoinOnchain(
  */
 export function isLikelyNotPumpCoin(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
-  return (
-    /beyond buffer length/i.test(msg) ||
-    /out of range/i.test(msg) ||
-    /expected.{0,30}length/i.test(msg) ||
-    /deserialize/i.test(msg) ||
-    /invalid account data/i.test(msg) ||
-    /Account not found/i.test(msg) ||
-    /Account does not exist or has no data/i.test(msg) ||
-    /pool account not found/i.test(msg) ||
-    /BondingCurveNotFound/i.test(msg)
-  );
+  const lower = msg.toLowerCase();
+  if (/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/i.test(msg)) return true;
+  if (/Es9vMFrzaCERmJfrF4H2YD4KCoNkY11McCe8BenwNYB/i.test(msg)) return true;
+  if (/So11111111111111111111111111111111111111112/i.test(msg)) return true;
+  if (/doesn't look like a pump/i.test(lower)) return true;
+  if (/not a pump/i.test(lower)) return true;
+  if (/bonding.?curve.?not.?found/i.test(lower)) return true;
+  if (/not a bonding curve/i.test(lower)) return true;
+  if (/invalid.?discriminator/i.test(lower)) return true;
+  if (/unexpected.?tag/i.test(lower)) return true;
+  if (/could not deserialize/i.test(lower)) return true;
+  if (/invalid mint/i.test(lower)) return true;
+  if (/beyond buffer length/i.test(lower)) return true;
+  if (/out of range/i.test(lower)) return true;
+  if (/expected.{0,30}length/i.test(lower)) return true;
+  if (/deserialize/i.test(lower)) return true;
+  if (/invalid account data/i.test(lower)) return true;
+  if (/Account not found/i.test(lower)) return true;
+  if (/Account does not exist or has no data/i.test(lower)) return true;
+  if (/pool account not found/i.test(lower)) return true;
+  if (/BondingCurveNotFound/i.test(lower)) return true;
+  return false;
 }
 
 export function friendlyOnchainError(err: unknown, mint: string): string {

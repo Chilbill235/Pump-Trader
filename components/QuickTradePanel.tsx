@@ -175,6 +175,18 @@ function classifyError(raw: string): ErrorHint {
       ],
     };
   }
+  if (lower.includes("failed to fetch") || lower.includes("networkerror")) {
+    return {
+      title: "Network — could not reach Jupiter",
+      detail: raw,
+      fixes: [
+        "Could not reach Jupiter's quote/swap API. This is usually a network/CORS issue.",
+        "If running on localhost, try: npx next dev --experimental-https (then accept the self-signed cert).",
+        "Or switch to SIMULATE mode to trade without hitting live APIs.",
+        "Check your internet connection and retry.",
+      ],
+    };
+  }
   if (lower.includes("graduat")) {
     return {
       title: "Coin graduated off the curve",
@@ -297,6 +309,14 @@ export function QuickTradePanel(props: Props) {
     let cancelled = false;
     void (async () => {
       try {
+        const known = getKnownTokenMeta(props.mint);
+        if (known) {
+          const nonPumpSymbols = new Set(["SOL", "USDC", "USDT", "wBTC", "ETH", "BNB", "MATIC", "AVAX", "RAY", "ORCA", "Jito"]);
+          if (nonPumpSymbols.has(known.symbol.toUpperCase())) {
+            if (!cancelled) setPumpSupported(false);
+            return;
+          }
+        }
         const probe = await quoteTrade({
           connection,
           mint: props.mint,
@@ -404,8 +424,13 @@ export function QuickTradePanel(props: Props) {
     try {
       const parsed = parsedAmounts();
       const outSymbol = symbol;
-      // Decide venue
-      const tryPump = pumpSupported !== false && inMint === SOL_MINT;
+      const known = getKnownTokenMeta(props.mint);
+      const isKnownNonPump = known
+        ? ["SOL", "USDC", "USDT", "WBTC", "ETH", "BNB", "MATIC", "AVAX", "RAY", "ORCA", "JITO"].includes(
+            known.symbol.toUpperCase(),
+          )
+        : false;
+      const tryPump = pumpSupported !== false && inMint === SOL_MINT && !isKnownNonPump;
       if (tryPump) {
         try {
           if (side === "buy") {

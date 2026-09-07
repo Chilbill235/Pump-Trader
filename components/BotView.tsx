@@ -43,6 +43,8 @@ import { CoinImage } from "./CoinImage";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { useSettings } from "./SettingsProvider";
 import { useActiveAccountId } from "./AccountsProvider";
+import { useWalletData } from "./WalletDataProvider";
+import { fetchJupiterUsdPrice } from "@/lib/jupiter";
 
 const POLL_MS = 12_000;
 
@@ -64,6 +66,7 @@ export function BotView() {
   const { connection } = useConnection();
   const { settings } = useSettings();
   const accountId = useActiveAccountId();
+  const walletData = useWalletData();
   const [log, setLog] = useState<BotLogEntry[]>([]);
   const [session, setSession] = useState<BotSession | null>(null);
   const [positionsPnl, setPositionsPnl] = useState<
@@ -71,6 +74,7 @@ export function BotView() {
   >([]);
   const [bankrollSol, setBankrollSol] = useState<number | null>(null);
   const [solUsd, setSolUsd] = useState<number | null>(null);
+  const [totalHoldingsUsd, setTotalHoldingsUsd] = useState<number | null>(null);
   const [closedTrades, setClosedTrades] = useState<ClosedTrade[]>([]);
   const [equityCurve, setEquityCurve] = useState<EquityPoint[]>([]);
   const [bankrollCfg, setBankrollCfg] = useState<BankrollConfig>(DEFAULT_BANKROLL_CONFIG);
@@ -130,6 +134,32 @@ export function BotView() {
     const id = setInterval(() => void refreshLive(), POLL_MS);
     return () => clearInterval(id);
   }, [refreshLive]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const compute = async () => {
+      if (!walletData.holdings.length) {
+        setTotalHoldingsUsd(null);
+        return;
+      }
+      const mints = walletData.holdings.map((h) => h.mint);
+      const prices = await fetchJupiterUsdPrice(mints);
+      let total = 0;
+      for (const h of walletData.holdings) {
+        const p = prices[h.mint];
+        if (p != null && Number.isFinite(p) && p > 0) {
+          total += h.uiAmount * p;
+        }
+      }
+      if (!cancelled) setTotalHoldingsUsd(total);
+    };
+    void compute();
+    const id = setInterval(compute, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [walletData.holdings]);
 
   const refreshPositions = useCallback(async () => {
     if (!accountId) return;
@@ -366,7 +396,7 @@ export function BotView() {
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Session"
           value={
@@ -393,25 +423,32 @@ export function BotView() {
           }
           tone={stats.equitySol >= (getStartBankroll(accountId) || 0) ? "neon" : "danger"}
         />
+        {totalHoldingsUsd != null ? (
+          <StatCard
+            label="Total holdings"
+            value={`≈ $${totalHoldingsUsd.toFixed(2)}`}
+            sub={
+              solUsd != null && bankrollSol != null
+                ? `${bankrollSol.toFixed(4)} SOL · ${walletData.holdings.length} tokens`
+                : walletData.holdings.length > 0
+                  ? `${walletData.holdings.length} tokens`
+                  : "loading…"
+            }
+            tone="mute"
+          />
+        ) : (
+          <StatCard
+            label="Wallet"
+            value={walletOk ? "connected" : "disconnected"}
+            sub={walletData.error ?? walletData.holdings.length > 0 ? `${walletData.holdings.length} tokens` : "loading…"}
+            tone={walletOk ? "neon" : "danger"}
+          />
+        )}
         <StatCard
           label="Realized PnL"
           value={`${stats.realizedPnlSol >= 0 ? "+" : ""}${stats.realizedPnlSol.toFixed(4)} SOL`}
           sub={`${(stats.realizedPnlPct * 100).toFixed(2)}% from start · drawdown ${(stats.drawdownPct * 100).toFixed(1)}%`}
           tone={stats.realizedPnlSol > 0 ? "neon" : stats.realizedPnlSol < 0 ? "danger" : "mute"}
-        />
-        <StatCard
-          label="Win rate"
-          value={
-            stats.closed > 0
-              ? `${(stats.winRate * 100).toFixed(0)}% (${stats.wins}W / ${stats.losses}L)`
-              : "—"
-          }
-          sub={
-            stats.closed > 0
-              ? `avg win ${stats.avgWinSol.toFixed(3)} SOL · avg loss ${stats.avgLossSol.toFixed(3)} SOL`
-              : "no closed trades yet"
-          }
-          tone={stats.winRate >= 0.5 && stats.closed > 4 ? "neon" : stats.closed > 0 ? "warn" : "mute"}
         />
       </div>
 
