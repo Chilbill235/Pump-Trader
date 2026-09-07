@@ -4,14 +4,14 @@ const JUP_API_KEY = process.env.NEXT_PUBLIC_JUPITER_API_KEY?.trim();
 
 const PRICE_ENDPOINTS = [
   "https://api.jup.ag/price/v3",
+  "https://lite-api.jup.ag/price/v3",
+  "https://price.jup.ag/v3",
   "https://price.jup.ag/v2",
-  "https://price.jup.ag/v1",
-  "https://jupiter.6e.technology/v2/price",
 ];
 
 const STATIC_PRICES: Record<string, number> = {
   EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v: 1,
-  Es9vMFrzaCERmJfrF4H2YD4KCoNkY11McCe8BenwNYB: 1,
+  Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB: 1,
   So11111111111111111111111111111111111111112: 101,
 };
 

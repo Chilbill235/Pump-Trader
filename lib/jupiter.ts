@@ -1,44 +1,34 @@
 "use client";
 
 /**
- * Jupiter aggregator quotes + swap instructions.
+ * Jupiter aggregator quotes + swap execution.
  *
- * We use the public Jupiter REST API:
- *   - https://quote-api.jup.ag/v6/quote
- *   - https://quote-api.jup.ag/v6/swap
+ * We use the current Jupiter Swap API V2 (https://api.jup.ag/swap/v2):
+ *   - GET  /swap/v2/order   - quote + assembled transaction (needs `taker`)
+ *   - POST /swap/v2/execute - managed transaction landing after in-wallet signing
  *
- * No API key required for read paths, and the swap endpoint returns a
- * fully-built VersionedTransaction that we can sign + send from the wallet.
+ * Keyless access works at 0.5 RPS; set NEXT_PUBLIC_JUPITER_API_KEY for higher
+ * limits. All Jupiter traffic goes through the app's own proxy routes
+ * (/api/jupiter/quote, /api/jupiter/swap, /api/jupiter/price) so the API key
+ * stays server-side and CORS is never an issue.
  *
  * The point of this module: let the user trade *any* SPL token, paying with
  * *any* SPL token they have enough of in the wallet. The pump-sdk only knows
  * about pump.fun bonding curves + pump-amm. Jupiter covers the long tail
  * (USDC, USDT, BONK, JUP, RAY, wBTC, meme coins, etc.).
  *
- * This file is "use client" because it runs in the browser and hits Jupiter
- * directly from the user's session — no server hop needed.
+ * This file is "use client" because it runs in the browser and orchestrates
+ * wallet signing locally - no private keys ever leave the wallet.
  */
 
 import {
-  ComputeBudgetProgram,
-  PublicKey,
-  TransactionMessage,
   VersionedTransaction,
   type Connection,
 } from "@solana/web3.js";
 import type { WalletContextState } from "@solana/wallet-adapter-react";
 import { friendlyOnchainError } from "./sdk";
 
-const JUP_API_PRIMARY = "https://api.jup.ag/swap/v2";
-const JUP_API_FALLBACKS = [
-  "https://quote-api.jup.ag/v2",
-  "https://quote-api.jup.ag/v1",
-  "https://jupiter.6e.technology/v2",
-];
 const DEFAULT_SLIPPAGE_BPS = 500;
-
-const JUP_API_KEY = (typeof process !== "undefined" ? process.env.NEXT_PUBLIC_JUPITER_API_KEY : undefined)?.trim();
-const JUP_HEADERS: Record<string, string> = JUP_API_KEY ? { "x-api-key": JUP_API_KEY } : {}; // 5% — matches settings default
 
 export type JupiterQuote = {
   inputMint: string;
@@ -50,6 +40,12 @@ export type JupiterQuote = {
   slippageBps: number;
   priceImpactPct: string;
   routePlan: unknown[];
+  /** Swap API V2: base64 assembled transaction from GET /order. Null when the quote came from a legacy quote-only fallback. */
+  transaction?: string | null;
+  /** Swap API V2: order id required by POST /execute. */
+  requestId?: string | null;
+  /** Present when /order could not assemble a transaction (see transaction === "" / null). */
+  errorMessage?: string;
 };
 
 export type JupiterSimplePrice = {
@@ -77,37 +73,32 @@ export function shortTokenLabel(mint: string, fallbackSymbol?: string): string {
   if (fallbackSymbol && fallbackSymbol.length > 0 && fallbackSymbol !== "???") return fallbackSymbol;
   const known = KNOWN_MINTS[mint];
   if (known) return known.symbol;
-  return `${mint.slice(0, 4)}…${mint.slice(-4)}`;
+  return `${mint.slice(0, 4)}...${mint.slice(-4)}`;
 }
 
 async function jupFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  // All Jupiter traffic goes through the app's own proxy routes.
   const localBase = "/api/jupiter";
-  const remoteBases = [JUP_API_PRIMARY, ...JUP_API_FALLBACKS];
-  const endpoints = [localBase, ...remoteBases];
   let lastErr: unknown = null;
-  for (const base of endpoints) {
-    const isLocal = base === localBase;
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
-        const url = `${base}${path}`;
-        const res = await fetch(url, {
-          ...init,
-          headers: { Accept: "application/json", ...(isLocal ? {} : JUP_HEADERS), ...(init?.headers ?? {}) },
-          cache: "no-store",
-          signal: AbortSignal.timeout(isLocal ? 15000 : 10000),
-        });
-        if (!res.ok) {
-          const body = await res.text();
-          throw new Error(`Jupiter HTTP ${res.status}: ${body.slice(0, 200)}`);
-        }
-        return (await res.json()) as T;
-      } catch (err) {
-        lastErr = err;
-        const msg = err instanceof Error ? err.message : String(err);
-        const isNetwork = /failed to fetch/i.test(msg) || /networkerror/i.test(msg) || /all_jupiter_endpoints_failed/i.test(msg) || err instanceof TypeError;
-        if (!isNetwork || attempt >= 2) break;
-        await new Promise((r) => setTimeout(r, 500));
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const res = await fetch(`${localBase}${path}`, {
+        ...init,
+        headers: { Accept: "application/json", ...(init?.headers ?? {}) },
+        cache: "no-store",
+        signal: AbortSignal.timeout(20000),
+      });
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(`Jupiter HTTP ${res.status}: ${body.slice(0, 200)}`);
       }
+      return (await res.json()) as T;
+    } catch (err) {
+      lastErr = err;
+      const msg = err instanceof Error ? err.message : String(err);
+      const isNetwork = /failed to fetch/i.test(msg) || /networkerror/i.test(msg) || /all_jupiter_endpoints_failed/i.test(msg) || err instanceof TypeError;
+      if (!isNetwork || attempt >= 2) break;
+      await new Promise((r) => setTimeout(r, 500));
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
@@ -161,6 +152,8 @@ export async function fetchJupiterQuote(args: {
   amountRaw: string;
   slippageBps?: number;
   swapMode?: "ExactIn" | "ExactOut";
+  /** Wallet pubkey (base58). Required for Swap API V2 /order to assemble a transaction. */
+  taker?: string;
 }): Promise<JupiterQuote> {
   if (args.inputMint === args.outputMint) {
     return {
@@ -173,6 +166,8 @@ export async function fetchJupiterQuote(args: {
       slippageBps: 0,
       priceImpactPct: "0",
       routePlan: [],
+      transaction: null,
+      requestId: null,
     };
   }
   const params = new URLSearchParams({
@@ -181,7 +176,9 @@ export async function fetchJupiterQuote(args: {
     amount: args.amountRaw,
     slippageBps: String(args.slippageBps ?? DEFAULT_SLIPPAGE_BPS),
     swapMode: args.swapMode ?? "ExactIn",
+    restrictIntermediateTokens: "false",
   });
+  if (args.taker) params.set("taker", args.taker);
   try {
     return await jupFetch<JupiterQuote>(`/quote?${params.toString()}`);
   } catch (err) {
@@ -193,57 +190,97 @@ export async function fetchJupiterQuote(args: {
   }
 }
 
-type JupiterSwapResponse = {
+type ExecuteResponse = {
+  status: "Success" | "Failed";
+  signature: string;
+  error?: string;
+};
+
+type LegacySwapResponse = {
   swapTransaction: string; // base64 VersionedTransaction
   lastLedgerValidTimeHeight?: number;
 };
-
-export async function fetchJupiterSwapTransaction(args: {
-  quote: JupiterQuote;
-  userPublicKey: PublicKey;
-  wrapAndUnwrapSol?: boolean;
-  dynamicComputeUnitLimit?: boolean;
-  prioritizationFeeLamports?: number | "auto";
-}): Promise<JupiterSwapResponse> {
-  if (args.quote.inputMint === args.quote.outputMint) {
-    return {
-      swapTransaction: Buffer.from(new Uint8Array(0)).toString("base64"),
-      lastLedgerValidTimeHeight: 0,
-    };
-  }
-  const body = {
-    quoteResponse: args.quote,
-    userPublicKey: args.userPublicKey.toBase58(),
-    wrapAndUnwrapSol: args.wrapAndUnwrapSol ?? true,
-    dynamicComputeUnitLimit: args.dynamicComputeUnitLimit ?? true,
-    prioritizationFeeLamports: args.prioritizationFeeLamports ?? "auto",
-  };
-  try {
-    return await jupFetch<JupiterSwapResponse>("/swap", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (/all_jupiter_endpoints_failed/i.test(msg) || /failed to fetch/i.test(msg) || /networkerror/i.test(msg)) {
-      throw new Error(`Jupiter swap unreachable. ${msg}. Use VPN or switch to SIMULATE mode.`);
-    }
-    throw new Error(msg);
-  }
-}
 
 function versionedTxFromBase64(b64: string): VersionedTransaction {
   const buf = Buffer.from(b64, "base64");
   return VersionedTransaction.deserialize(buf);
 }
 
+/** Local simulation purely to surface clear errors before the wallet prompt. */
+async function simulateForFriendlyErrors(connection: Connection, tx: VersionedTransaction): Promise<void> {
+  try {
+    const sim = await connection.simulateTransaction(tx, {
+      sigVerify: false,
+      replaceRecentBlockhash: true,
+    });
+    if (sim.value.err) {
+      const logs = sim.value.logs ?? [];
+      throw new Error(
+        `Swap simulation failed: ${JSON.stringify(sim.value.err)}\n${logs.slice(-8).join("\n")}`,
+      );
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // Simulation is a convenience - if the RPC itself is down, don't block a
+    // legitimate swap; the on-chain execution will report the real error.
+    if (msg.startsWith("Swap simulation failed")) throw err;
+  }
+}
+
+async function signWithWallet(wallet: WalletContextState, tx: VersionedTransaction): Promise<VersionedTransaction> {
+  if (!wallet.signTransaction) {
+    throw new Error("Wallet does not support signTransaction. Update the wallet extension and reconnect.");
+  }
+  try {
+    return await wallet.signTransaction(tx);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`Wallet rejected the swap: ${msg}`);
+  }
+}
+
+async function broadcastAndConfirm(
+  connection: Connection,
+  wallet: WalletContextState,
+  tx: VersionedTransaction,
+): Promise<string> {
+  let signature: string;
+  try {
+    if (wallet.sendTransaction) {
+      signature = await wallet.sendTransaction(tx, connection, {
+        skipPreflight: false,
+        maxRetries: 3,
+      });
+    } else {
+      signature = await connection.sendRawTransaction(tx.serialize(), {
+        skipPreflight: false,
+        maxRetries: 3,
+      });
+    }
+  } catch (err) {
+    throw new Error(friendlyOnchainError(err, ""));
+  }
+  const conf = await connection.confirmTransaction(signature, "confirmed");
+  if (conf.value.err) {
+    throw new Error(`Transaction confirmed but failed: ${JSON.stringify(conf.value.err)}`);
+  }
+  return signature;
+}
+
 /**
- * High-level: simulate + send a Jupiter swap.
+ * High-level: sign + land a Jupiter swap.
  *
  * This intentionally mirrors `simulateAndSend` from lib/trade.ts but routes
- * through Jupiter instead of the pump program. We re-simulate before sending
- * so failures show up as friendly errors before the wallet prompt.
+ * through Jupiter. Two flows, picked from what the quote carries:
+ *
+ *  - Swap API V2 (preferred): the quote already contains an assembled
+ *    `transaction` (from GET /order). We simulate it locally for friendly
+ *    pre-flight errors, ask the wallet to sign, then hand the signed tx to
+ *    Jupiter's /execute for managed landing. If /execute is unreachable we
+ *    broadcast the signed transaction ourselves via the RPC connection.
+ *  - Legacy fallback: the quote has no transaction (quote-only upstream), so
+ *    we ask the proxy to build a swapTransaction from the quote, then sign +
+ *    send it via the wallet/RPC as before.
  */
 export async function jupiterSimulateAndSend(args: {
   connection: Connection;
@@ -258,107 +295,96 @@ export async function jupiterSimulateAndSend(args: {
     return { signature: null, quote: args.quote };
   }
 
-  const swap = await fetchJupiterSwapTransaction({
-    quote: args.quote,
-    userPublicKey: user,
-    wrapAndUnwrapSol: true,
-    dynamicComputeUnitLimit: true,
-    prioritizationFeeLamports: "auto",
-  });
-
-  const tx = versionedTxFromBase64(swap.swapTransaction);
-
-  // Prepend our own compute budget in case Jupiter omitted it. Cheap and safe
-  // to add even when Jupiter already set dynamic CU.
-  try {
-    const { blockhash, lastValidBlockHeight } = await args.connection.getLatestBlockhash(
-      "confirmed",
-    );
-    const budget = [
-      ComputeBudgetProgram.setComputeUnitLimit({ units: 600_000 }),
-      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100_000 }),
-    ];
-    const message = TransactionMessage.decompile(tx.message);
-    const rebuilt = new TransactionMessage({
-      payerKey: message.payerKey,
-      recentBlockhash: blockhash,
-      instructions: [...budget, ...message.instructions],
-    }).compileToV0Message();
-    const reTx = new VersionedTransaction(rebuilt);
-
-    const sim = await args.connection.simulateTransaction(reTx, {
-      sigVerify: false,
-      replaceRecentBlockhash: true,
-    });
-    if (sim.value.err) {
-      const logs = sim.value.logs ?? [];
-      throw new Error(
-        `Simulation failed: ${JSON.stringify(sim.value.err)}\n${logs.slice(-8).join("\n")}`,
-      );
+  if (!args.quote.transaction) {
+    // ---------- Legacy flow: quote - swapTransaction - sign - send ----------
+    if (args.quote.errorMessage) {
+      throw new Error(`Jupiter could not route this swap: ${args.quote.errorMessage}`);
     }
-    if (!args.wallet.sendTransaction) throw new Error("Wallet does not support sendTransaction.");
-    
-    const errors: string[] = [];
-    let signature: string | null = null;
-    
-    try {
-      signature = await args.wallet.sendTransaction(reTx, args.connection, {
-        skipPreflight: false,
-        maxRetries: 3,
-      });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      errors.push(`wallet.sendTransaction: ${msg}`);
-      
-      if (JUP_API_KEY) {
+    const swap = await jupFetch<LegacySwapResponse>("/swap", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        quoteResponse: args.quote,
+        userPublicKey: user.toBase58(),
+        wrapAndUnwrapSol: true,
+        dynamicComputeUnitLimit: true,
+        prioritizationFeeLamports: "auto",
+      }),
+    });
+    if (!swap.swapTransaction) {
+      throw new Error("Jupiter returned an empty swap transaction. Try again or adjust the amount.");
+    }
+    const tx = versionedTxFromBase64(swap.swapTransaction);
+    await simulateForFriendlyErrors(args.connection, tx);
+    const signed = await signWithWallet(args.wallet, tx);
+    const signature = await broadcastAndConfirm(args.connection, args.wallet, signed);
+    return { signature, quote: args.quote };
+  }
+
+  // ---------- Swap API V2 flow: order - sign - execute ----------
+  if (args.quote.errorMessage) {
+    throw new Error(`Jupiter could not route this swap: ${args.quote.errorMessage}`);
+  }
+
+  const tx = versionedTxFromBase64(args.quote.transaction);
+  await simulateForFriendlyErrors(args.connection, tx);
+  const signed = await signWithWallet(args.wallet, tx);
+  const signedB64 = Buffer.from(signed.serialize()).toString("base64");
+
+  const errors: string[] = [];
+  let signature: string | null = null;
+
+  try {
+    const exec = await jupFetch<ExecuteResponse>("/swap", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        signedTransaction: signedB64,
+        ...(args.quote.requestId ? { requestId: args.quote.requestId } : {}),
+      }),
+    });
+    if (exec.signature) signature = exec.signature;
+    if (exec.status === "Failed") {
+      errors.push(`execute: ${exec.error ?? "transaction failed on-chain"}`);
+      // The signature exists even on failure - confirmTransaction below will
+      // surface the on-chain error. If Jupiter didn't hand one back, fall
+      // through to broadcasting the signed tx via our own RPC.
+      if (!signature) {
         try {
-          const signedTx = Buffer.from(await reTx.serialize()).toString("base64");
-          const sendRes = await fetch("https://tx.jup.ag/", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-api-key": JUP_API_KEY,
-            },
-            body: JSON.stringify({
-              jsonrpc: "2.0",
-              id: 123,
-              method: "sendTransaction",
-              params: [signedTx, { encoding: "base64" }],
-            }),
-            signal: AbortSignal.timeout(15000),
+          signature = await args.connection.sendRawTransaction(signed.serialize(), {
+            skipPreflight: false,
+            maxRetries: 3,
           });
-          if (sendRes.ok) {
-            const sendData = await sendRes.json();
-            if (sendData.result) {
-              signature = sendData.result;
-            }
-          } else {
-            errors.push(`tx.jup.ag: ${sendRes.status}`);
-          }
-        } catch (txErr) {
-          const txMsg = txErr instanceof Error ? txErr.message : String(txErr);
-          errors.push(`tx.jup.ag: ${txMsg}`);
+        } catch (sendErr) {
+          errors.push(`rpc sendRawTransaction: ${sendErr instanceof Error ? sendErr.message : String(sendErr)}`);
         }
       }
     }
-    
-    if (!signature) {
-      throw new Error(`All broadcast methods failed: ${errors.join(", ")}`);
+  } catch (err) {
+    errors.push(`execute: ${err instanceof Error ? err.message : String(err)}`);
+    // Managed landing unreachable - broadcast the already-signed tx ourselves.
+    try {
+      signature = await args.connection.sendRawTransaction(signed.serialize(), {
+        skipPreflight: false,
+        maxRetries: 3,
+      });
+    } catch (sendErr) {
+      errors.push(`rpc sendRawTransaction: ${sendErr instanceof Error ? sendErr.message : String(sendErr)}`);
     }
-    
-    const conf = await args.connection.confirmTransaction(
-      { signature, blockhash, lastValidBlockHeight },
-      "confirmed",
-    );
+  }
+
+  if (!signature) {
+    throw new Error(`All broadcast methods failed: ${errors.join(", ")}`);
+  }
+
+  try {
+    const conf = await args.connection.confirmTransaction(signature, "confirmed");
     if (conf.value.err) {
       throw new Error(`Transaction confirmed but failed: ${JSON.stringify(conf.value.err)}`);
     }
-    return { signature, quote: args.quote };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (/failed to fetch/i.test(msg) || /networkerror/i.test(msg)) {
-      throw new Error(`Jupiter swap unreachable. ${msg}. Check your internet or try again.`);
-    }
     throw new Error(friendlyOnchainError(err, args.quote.outputMint));
   }
+
+  return { signature, quote: args.quote };
 }

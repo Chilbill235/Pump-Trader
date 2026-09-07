@@ -174,18 +174,17 @@ export function validateBotStart(args: {
   }
   const sol = args.balanceLamports / LAMPORTS_PER_SOL;
   const currency = args.currency ?? "SOL";
-  const usd = args.solUsd != null && Number.isFinite(args.solUsd) && args.solUsd > 0 ? sol * args.solUsd : null;
   
   if (currency === "USD" || currency === "USDC") {
-    const balanceInCurrency = usd ?? sol * 101;
-    if (balanceInCurrency < MIN_BOT_USD_BALANCE) {
-      const solLabel = currency === "USD" ? "SOL" : "SOL";
+    const feeSol = MIN_SOL_RESERVED_FOR_FEES;
+    const feeUsd = feeSol * (args.solUsd ?? 101);
+    if (sol < feeSol) {
       return (
-        `Need at least $${MIN_BOT_USD_BALANCE.toFixed(2)} worth of ${solLabel} to start the bot ` +
-        `(wallet has ${sol.toFixed(4)} ${solLabel} ≈ $${(usd ?? sol * 101).toFixed(2)}). ` +
-        `Top up the wallet or lower your RPC/environment costs.`
+        `Need at least ${feeSol} SOL (≈ $${feeUsd.toFixed(2)}) for transaction fees when using ${currency}. ` +
+        `Top up a small amount of SOL for fees, and use ${currency} for trading capital.`
       );
     }
+    return null;
   }
   
   if (args.solUsd != null && Number.isFinite(args.solUsd) && args.solUsd > 0) {

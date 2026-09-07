@@ -522,6 +522,7 @@ export function QuickTradePanel(props: Props) {
   }
 
   async function jupQuoteFor(inputRaw: BN): Promise<JupiterQuote> {
+    const taker = wallet.publicKey?.toBase58();
     if (side === "buy") {
       return fetchJupiterQuote({
         inputMint: inMint,
@@ -529,6 +530,7 @@ export function QuickTradePanel(props: Props) {
         amountRaw: inputRaw.toString(),
         slippageBps: Math.round(settings.slippagePct * 100),
         swapMode: "ExactIn",
+        taker,
       });
     }
     return fetchJupiterQuote({
@@ -537,6 +539,7 @@ export function QuickTradePanel(props: Props) {
       amountRaw: inputRaw.toString(),
       slippageBps: Math.round(settings.slippagePct * 100),
       swapMode: "ExactIn",
+      taker,
     });
   }
 
