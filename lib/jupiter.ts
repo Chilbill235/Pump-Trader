@@ -34,7 +34,6 @@ const JUP_API_FALLBACKS = [
   "https://jupiter.6e.technology/v6",
   "https://quote-api.jup.ag/v6",
 ];
-const JUP_PRICE_API = "https://price.jup.ag/v6";
 const DEFAULT_SLIPPAGE_BPS = 500;
 
 const JUP_API_KEY = (typeof process !== "undefined" ? process.env.NEXT_PUBLIC_JUPITER_API_KEY : undefined)?.trim();
@@ -82,16 +81,20 @@ export function shortTokenLabel(mint: string, fallbackSymbol?: string): string {
 }
 
 async function jupFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const endpoints = [JUP_API_PRIMARY, ...JUP_API_FALLBACKS];
+  const localBase = "/api/jupiter";
+  const remoteBases = [JUP_API_PRIMARY, ...JUP_API_FALLBACKS];
+  const endpoints = [localBase, ...remoteBases];
   let lastErr: unknown = null;
   for (const base of endpoints) {
-    for (let attempt = 1; attempt <= 2; attempt++) {
+    const isLocal = base === localBase;
+    for (let attempt = 1; attempt <= (isLocal ? 2 : 2); attempt++) {
       try {
-      const res = await fetch(`${base}${path}`, {
-        ...init,
-        headers: { Accept: "application/json", ...JUP_HEADERS, ...(init?.headers ?? {}) },
-        cache: "no-store",
-      });
+        const url = isLocal ? `${base}${path}` : `${base}${path}`;
+        const res = await fetch(url, {
+          ...init,
+          headers: { Accept: "application/json", ...(isLocal ? {} : JUP_HEADERS), ...(init?.headers ?? {}) },
+          cache: "no-store",
+        });
         if (!res.ok) {
           const body = await res.text();
           throw new Error(`Jupiter HTTP ${res.status}: ${body.slice(0, 200)}`);
@@ -124,7 +127,7 @@ export async function fetchJupiterUsdPrice(mints: string[]): Promise<Record<stri
   if (toFetch.length === 0) return out;
   try {
     const ids = toFetch.join(",");
-    const res = await fetch(`${JUP_PRICE_API}/price?ids=${ids}`, { cache: "no-store" });
+    const res = await fetch(`/api/jupiter/price?ids=${ids}`, { cache: "no-store" });
     if (!res.ok) {
       for (const m of toFetch) out[m] = null;
       return out;
@@ -133,8 +136,8 @@ export async function fetchJupiterUsdPrice(mints: string[]): Promise<Record<stri
     for (const m of toFetch) {
       const v = data?.[m]?.usdPrice;
       const usd = typeof v === "number" && Number.isFinite(v) ? v : null;
+      if (usd != null) PRICE_CACHE.set(m, { usd, ts: Date.now() });
       out[m] = usd;
-      if (usd != null) PRICE_CACHE.set(m, { usd, ts: now });
     }
   } catch {
     for (const m of toFetch) out[m] = null;

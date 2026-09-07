@@ -1,6 +1,6 @@
 {
   "name": "pump-trader",
-  "version": "0.1.0",
+  "version": "5.1.2",
   "private": true,
   "scripts": {
     "dev": "next dev",
