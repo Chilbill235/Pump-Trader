@@ -35,7 +35,10 @@ const JUP_API_FALLBACKS = [
   "https://quote-api.jup.ag/v6",
 ];
 const JUP_PRICE_API = "https://price.jup.ag/v6";
-const DEFAULT_SLIPPAGE_BPS = 500; // 5% — matches settings default
+const DEFAULT_SLIPPAGE_BPS = 500;
+
+const JUP_API_KEY = (typeof process !== "undefined" ? process.env.NEXT_PUBLIC_JUPITER_API_KEY : undefined)?.trim();
+const JUP_HEADERS: Record<string, string> = JUP_API_KEY ? { "x-api-key": JUP_API_KEY } : {}; // 5% — matches settings default
 
 export type JupiterQuote = {
   inputMint: string;
@@ -84,11 +87,11 @@ async function jupFetch<T>(path: string, init?: RequestInit): Promise<T> {
   for (const base of endpoints) {
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
-        const res = await fetch(`${base}${path}`, {
-          ...init,
-          headers: { Accept: "application/json", ...(init?.headers ?? {}) },
-          cache: "no-store",
-        });
+      const res = await fetch(`${base}${path}`, {
+        ...init,
+        headers: { Accept: "application/json", ...JUP_HEADERS, ...(init?.headers ?? {}) },
+        cache: "no-store",
+      });
         if (!res.ok) {
           const body = await res.text();
           throw new Error(`Jupiter HTTP ${res.status}: ${body.slice(0, 200)}`);

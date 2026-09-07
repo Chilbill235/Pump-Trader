@@ -4,17 +4,9 @@ setlocal EnableExtensions EnableDelayedExpansion
 REM ============================================================
 REM Pump Trader - auto upload to GitHub
 REM Usage:
-REM   deploy-github.bat                (commit + push to current branch)
-REM   deploy-github.bat "msg"          (custom commit message)
-REM   set GH_TOKEN=ghp_xxx ^&^& deploy-github.bat
-REM
-REM Optional env vars:
-REM   GH_TOKEN        - GitHub PAT (for unattended / scheduled runs)
-REM   BRANCH_NAME     - branch to push (default: current branch)
-REM   REMOTE_NAME     - remote to push to (default: origin)
-REM   REPO_DIR        - project root (default: this script's folder)
-REM   SKIP_INSTALL    - set to 1 to skip `npm ci`
-REM   SKIP_CHECKS     - set to 1 to skip typecheck + lint
+REM    deploy-github.bat                 (commit + push to current branch)
+REM    deploy-github.bat "msg"           (custom commit message)
+REM    set GH_TOKEN=ghp_xxx && deploy-github.bat
 REM ============================================================
 
 set "SCRIPT_DIR=%~dp0"
@@ -23,7 +15,7 @@ if "%REPO_DIR%"=="" set "REPO_DIR=%SCRIPT_DIR%"
 if "%REMOTE_NAME%"=="" set "REMOTE_NAME=origin"
 set "COMMIT_MSG=%~1"
 if "%COMMIT_MSG%"=="" set "COMMIT_MSG=Update pump-trader"
-set "GH_REPO=https://github.com/Chilbill235/Pump-Trader"
+set "GH_REPO=https://github.com/Chilbill235/Pump-Trader.git"
 
 cd /d "%REPO_DIR%"
 if errorlevel 1 (
@@ -51,10 +43,10 @@ if errorlevel 1 (
   git symbolic-ref HEAD refs/heads/main >nul 2>&1
 )
 
-git remote get-url %REMOTE_NAME% >nul 2>&1
+git remote get-url "%REMOTE_NAME%" >nul 2>&1
 if errorlevel 1 (
   echo [INFO] Remote '%REMOTE_NAME%' missing. Adding %GH_REPO%.
-  git remote add %REMOTE_NAME% %GH_REPO%
+  git remote add "%REMOTE_NAME%" "%GH_REPO%"
   if errorlevel 1 (
     echo [ERROR] git remote add failed.
     exit /b 1
@@ -71,34 +63,42 @@ if "%BRANCH_NAME%"=="" (
   for /f "delims=" %%B in ('git symbolic-ref --short HEAD') do set "BRANCH_NAME=%%B"
 )
 
-REM --- Pull first if the remote branch exists. ---
-git ls-remote --heads %REMOTE_NAME% %BRANCH_NAME% >nul 2>&1
+REM --- Stage everything first to allow safe rebase/pull ---
+echo === git add -A ===
+git add -A
+if errorlevel 1 (
+  echo [ERROR] git add failed.
+  exit /b 1
+)
+
+REM --- Pull changes if remote branch exists ---
+git ls-remote --heads "%REMOTE_NAME%" "%BRANCH_NAME%" >nul 2>&1
 if not errorlevel 1 (
   echo === git pull --rebase --autostash %REMOTE_NAME% %BRANCH_NAME% ===
-  git pull --rebase --autostash %REMOTE_NAME% %BRANCH_NAME%
+  git pull --rebase --autostash "%REMOTE_NAME%" "%BRANCH_NAME%"
   if errorlevel 1 (
-    echo [WARN] pull --rebase failed, falling back to merge.
-    git pull %REMOTE_NAME% %BRANCH_NAME%
+    echo [WARN] pull --rebase failed, attempting merge fallback...
+    git pull "%REMOTE_NAME%" "%BRANCH_NAME%" --allow-unrelated-histories --no-edit
   )
 ) else (
   echo [INFO] Remote branch %REMOTE_NAME%/%BRANCH_NAME% not found, skipping pull.
 )
 
-REM --- Install deps if needed. ---
+REM --- Install deps if needed ---
 if not "%SKIP_INSTALL%"=="1" (
   if not exist "node_modules" (
     echo === npm ci ===
-    npm ci
+    call npm ci
     if errorlevel 1 (
       echo [WARN] npm ci failed, trying npm install.
-      npm install
+      call npm install
     )
   ) else (
     echo [INFO] node_modules present, skipping install.
   )
 )
 
-REM --- Typecheck + lint (skip if SKIP_CHECKS=1). ---
+REM --- Typecheck + lint (skip if SKIP_CHECKS=1) ---
 if not "%SKIP_CHECKS%"=="1" (
   echo === typecheck ===
   call npm run typecheck
@@ -114,15 +114,7 @@ if not "%SKIP_CHECKS%"=="1" (
   )
 )
 
-REM --- Stage everything. ---
-echo === git add -A ===
-git add -A
-if errorlevel 1 (
-  echo [ERROR] git add failed.
-  exit /b 1
-)
-
-REM --- Commit only if there's something new. ---
+REM --- Commit only if there's something new ---
 git diff --cached --quiet
 set "DIFF_RC=%ERRORLEVEL%"
 if not "%DIFF_RC%"=="0" (
@@ -133,30 +125,28 @@ if not "%DIFF_RC%"=="0" (
     exit /b 1
   )
 ) else (
-  echo [INFO] Nothing to commit, skipping commit.
+  echo [INFO] Nothing to commit, proceeding to push.
 )
 
-REM --- Push. ---
+REM --- Push ---
 set "PUSH_RC=0"
 if defined GH_TOKEN (
-  for /f "delims=" %%R in ('git remote get-url %REMOTE_NAME%') do set "REMOTE_URL=%%R"
-  REM Build the auth URL with delayed expansion so GH_TOKEN is not parsed
-  REM as a batch parameter (which would explode on percent characters).
+  for /f "delims=" %%R in ('git remote get-url "%REMOTE_NAME%"') do set "REMOTE_URL=%%R"
   set "AUTH_URL=!REMOTE_URL:https://=https://%GH_TOKEN%@!"
-  echo === git push --token-- %REMOTE_NAME% %BRANCH_NAME% ===
+  echo === git push (authenticated token) %REMOTE_NAME% %BRANCH_NAME% ===
   git push "!AUTH_URL!" "%BRANCH_NAME%"
-  set "PUSH_RC=%ERRORLEVEL%"
+  set "PUSH_RC=!ERRORLEVEL!"
   set "AUTH_URL="
 ) else (
   echo === git push %REMOTE_NAME% %BRANCH_NAME% ===
   git push "%REMOTE_NAME%" "%BRANCH_NAME%"
-  set "PUSH_RC=%ERRORLEVEL%"
+  set "PUSH_RC=!ERRORLEVEL!"
 )
 
-if not "%PUSH_RC%"=="0" (
-  echo [ERROR] git push failed with code %PUSH_RC%.
-  echo Hint: if this is an auth failure, set GH_TOKEN=ghp_xxxxxxxxxxxxxxxx
-  exit /b %PUSH_RC%
+if not "!PUSH_RC!"=="0" (
+  echo [ERROR] git push failed with code !PUSH_RC!.
+  echo Hint: If this is an auth failure, set GH_TOKEN=ghp_xxxxxxxxxxxxxxxx
+  exit /b !PUSH_RC!
 )
 
 echo === done ===
