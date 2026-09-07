@@ -2,7 +2,7 @@
 
 import type { SVGProps } from "react";
 
-export type NavIconName = "markets" | "watch" | "wallet" | "positions" | "bot" | "settings";
+export type NavIconName = "markets" | "watch" | "wallet" | "positions" | "bot" | "settings" | "profile";
 
 export function NavIcon({ name, className, ...rest }: { name: NavIconName } & SVGProps<SVGSVGElement>) {
   const common = {
@@ -66,6 +66,14 @@ export function NavIcon({ name, className, ...rest }: { name: NavIconName } & SV
         <svg {...common} className={className}>
           <circle cx="8" cy="8" r="2" />
           <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M2.7 2.7l1 1M11.3 11.3l1 1M2.7 13.3l1-1M11.3 4.7l1-1" />
+        </svg>
+      );
+    case "profile":
+      // person
+      return (
+        <svg {...common} className={className}>
+          <circle cx="8" cy="5.5" r="2.5" />
+          <path d="M2.5 13.5c.8-2.6 3-4 5.5-4s4.7 1.4 5.5 4" />
         </svg>
       );
   }

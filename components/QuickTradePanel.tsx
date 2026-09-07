@@ -752,7 +752,21 @@ export function QuickTradePanel(props: Props) {
       setConfirmOpen(false);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      setErrorInfo(classifyError(msg));
+      const hint = classifyError(msg);
+      // User rejected / cancelled in the wallet: don't leave the trade sheet
+      // open with a scary red error — toast briefly and auto-close.
+      if (hint.title === "Cancelled in wallet" && props.onClose) {
+        notify({
+          level: "info",
+          category: "trade",
+          title: "Trade cancelled",
+          body: "You rejected the request in your wallet.",
+        });
+        setBusy(false);
+        setTimeout(() => props.onClose?.(), 900);
+        return;
+      }
+      setErrorInfo(hint);
     } finally {
       setBusy(false);
     }
@@ -1277,17 +1291,36 @@ export function QuickTradePanel(props: Props) {
       {errorInfo ? (
         <div
           role="alert"
-          className="mb-3 rounded-md border border-danger/40 bg-danger/5 p-3 text-xs"
+          className="fade-in relative mb-3 rounded-md border border-danger/40 bg-danger/5 p-3 pr-9 text-xs"
         >
-          <p className="font-mono font-semibold text-danger">{errorInfo.title}</p>
-          <p className="mt-1 font-mono text-mute">{errorInfo.detail}</p>
-          {errorInfo.fixes.length > 0 ? (
-            <ul className="mt-2 list-disc space-y-0.5 pl-5 text-mute">
-              {errorInfo.fixes.map((f) => (
-                <li key={f}>{f}</li>
-              ))}
-            </ul>
-          ) : null}
+          <span className="absolute left-3 top-3 text-danger" aria-hidden>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6">
+              <circle cx="7" cy="7" r="6" />
+              <path d="M7 4v3.5" strokeLinecap="round" />
+              <circle cx="7" cy="9.6" r="0.6" fill="currentColor" />
+            </svg>
+          </span>
+          <div className="pl-6">
+            <p className="font-mono font-semibold text-danger">{errorInfo.title}</p>
+            <p className="mt-1 font-mono text-mute">{errorInfo.detail}</p>
+            {errorInfo.fixes.length > 0 ? (
+              <ul className="mt-2 list-disc space-y-0.5 pl-5 text-mute">
+                {errorInfo.fixes.map((f) => (
+                  <li key={f}>{f}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={() => setErrorInfo(null)}
+            aria-label="Dismiss error"
+            className="press absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded text-mute hover:bg-danger/10 hover:text-danger"
+          >
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
+              <path d="M2 2l6 6M8 2l-6 6" strokeLinecap="round" />
+            </svg>
+          </button>
         </div>
       ) : null}
 

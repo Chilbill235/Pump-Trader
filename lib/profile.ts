@@ -12,6 +12,8 @@ export type AccountProfile = {
   bio?: string;
   /** Optional accent color for the UI (e.g. "#39ff88"). */
   color?: string;
+  /** Optional avatar emoji override (falls back to the initial letter). */
+  emoji?: string;
   /** Last RPC preset the user picked. Free-form string. */
   lastRpcPreset?: string;
   updatedAt: number;

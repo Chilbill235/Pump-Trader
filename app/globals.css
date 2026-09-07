@@ -155,6 +155,8 @@ input[type="number"] {
   display: flex;
   width: max-content;
   will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
   animation: marquee 28s linear infinite;
 }
 @media (prefers-reduced-motion: reduce) {

@@ -515,12 +515,11 @@ function BotRunningStrip(props: {
     <div className="relative overflow-hidden border-b border-neon/30 bg-gradient-to-r from-neon/15 via-neon/5 to-neon/15">
       <div
         aria-hidden
-        className="marquee pointer-events-none absolute inset-y-0 left-0 flex w-max items-center whitespace-nowrap font-mono text-[10px] uppercase tracking-[0.4em] text-neon/15"
+        className="marquee pointer-events-none absolute inset-y-0 left-0 flex w-max items-center whitespace-nowrap font-mono text-[10px] uppercase tracking-[0.4em] text-neon/20"
       >
-        <span>AUTO TRADING · PUMP TRADER · BOT ACTIVE ·&nbsp;</span>
-        <span>AUTO TRADING · PUMP TRADER · BOT ACTIVE ·&nbsp;</span>
-        <span>AUTO TRADING · PUMP TRADER · BOT ACTIVE ·&nbsp;</span>
-        <span>AUTO TRADING · PUMP TRADER · BOT ACTIVE ·&nbsp;</span>
+        {Array.from({ length: 6 }).map((_, i) => (
+          <span key={i}>AUTO TRADING · PUMP TRADER · BOT ACTIVE ·&nbsp;</span>
+        ))}
       </div>
       <div className="relative mx-auto flex max-w-[1400px] items-center justify-between gap-3 px-3 py-2 sm:px-4">
         <div className="flex items-center gap-2 text-xs">
@@ -800,6 +799,15 @@ function ProfileMenu(props: {
               </Link>
             </div>
             <div className="grid grid-cols-1 gap-1">
+              <Link
+                href="/profile"
+                onClick={props.onClose}
+                role="menuitem"
+                className="press flex items-center gap-2 rounded-md border border-line bg-ink-800 px-3 py-2 text-sm text-mute hover:border-neon hover:text-neon"
+              >
+                <NavIcon name="profile" className="h-4 w-4" />
+                Profile & customization
+              </Link>
               <Link
                 href="/settings"
                 onClick={props.onClose}

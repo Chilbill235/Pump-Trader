@@ -243,10 +243,36 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const requestPushPermission = useCallback(async () => {
-    if (typeof Notification === "undefined") return "denied" as NotificationPermission;
+    if (typeof window === "undefined") return "denied" as NotificationPermission;
+    const isIOS = /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+    const standalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+    if (typeof Notification === "undefined") {
+      // iOS Safari (in-browser) has no Notification API at all; only the
+      // installed Home-Screen PWA (iOS 16.4+) supports web push.
+      notify({
+        level: "warn",
+        category: "system",
+        title: isIOS ? "Push needs the installed app" : "Push not supported",
+        body: isIOS
+          ? "Tap Share → “Add to Home Screen”, open Pump Trader from there, then enable push."
+          : "This browser doesn't support web notifications. Try Chrome, Edge, or Firefox.",
+      });
+      return "denied" as NotificationPermission;
+    }
     if (Notification.permission === "granted") {
       setPermission("granted");
       return "granted";
+    }
+    if (isIOS && !standalone) {
+      notify({
+        level: "warn",
+        category: "system",
+        title: "Add to Home Screen first",
+        body: "iPhone allows push only inside the installed app: Share → “Add to Home Screen”, then enable push from there.",
+      });
+      return "denied" as NotificationPermission;
     }
     try {
       const p = await Notification.requestPermission();
@@ -259,10 +285,17 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
           icon: "/icons/icon-192.svg",
           badge: "/icons/favicon.svg",
         });
+      } else if (p === "denied") {
+        notify({
+          level: "info",
+          category: "system",
+          title: "Push blocked",
+          body: "You can re-enable notifications in your browser site settings.",
+        });
       }
       return p;
     } catch {
-      return "denied";
+      return "denied" as NotificationPermission;
     }
   }, []);
 

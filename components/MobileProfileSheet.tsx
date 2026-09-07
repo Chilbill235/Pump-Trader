@@ -320,6 +320,12 @@ function MobileProfileEditor({
     <div className="rounded-xl border border-line-soft bg-ink-850/60 p-3">
       <div className="mb-2 flex items-center justify-between">
         <p className="font-mono text-[10px] uppercase tracking-widest text-mute">Customize</p>
+        <Link
+          href="/profile"
+          className="press rounded border border-line bg-ink-800 px-1.5 py-0.5 font-mono text-[10px] text-mute hover:border-neon hover:text-neon"
+        >
+          full page →
+        </Link>
         {saved ? (
           <span className="flex items-center gap-1 font-mono text-[10px] text-neon">
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
